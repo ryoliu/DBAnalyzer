@@ -1,6 +1,6 @@
 # DBAnalyzer GUI 部署
 
-將整個 SqlAddm 資料夾複製到部署電腦，保留子資料夾結構。
+將整個 DBAnalyzer 資料夾複製到部署電腦，保留子資料夾結構。
 
 ## 使用方式
 
@@ -17,7 +17,7 @@
 建議在 SQL Server VM 內使用 Administrator 開啟 GUI。若要從目前電腦使用 VM 帳號連線，可先執行：
 
 ```powershell
-runas /netonly /user:WIN2019LAB\Administrator "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\SqlAddm\Deploy_GUI.ps1"
+runas /netonly /user:WIN2019LAB\Administrator "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\DBAnalyzer\Deploy_GUI.ps1"
 ```
 
 輸入密碼後會開啟 GUI，不會將密碼存入檔案。在 Instance 輸入 VM IP，例如 tcp:192.168.56.104,1433。
@@ -66,7 +66,7 @@ SQL 發生錯誤會停止並顯示檔名與批次。已完成的 SQL 不會整�
 仍可直接執行部署核心：
 
 ```powershell
-C:\SqlAddm\Deploy.ps1 -ServerInstance 'WIN2019LAB' -TrustServerCertificate
+C:\DBAnalyzer\Deploy.ps1 -ServerInstance 'WIN2019LAB' -TrustServerCertificate
 ```
 
 已驗證 GUI 的空白輸入檢查、Instance／憑證參數傳遞、背景執行、執行中關閉保護、成功與失敗狀態。每日分析已合併為一個 Job，歷史清除維持獨立 Job。
