@@ -1,0 +1,40 @@
+DeploymentLogs/
+*.log
+
+# Credentials and local configuration
+.env
+.env.*
+secrets.*
+credentials.*
+*.key
+*.pem
+*.pfx
+*.p12
+id_rsa
+id_ed25519
+
+# Database artifacts
+*.bak
+*.backup
+*.bkp
+*.trn
+*.mdf
+*.ndf
+*.ldf
+*.dmp
+*.dump
+*.rman
+*.sql.gz
+*.sql.zip
+wallet/
+network/admin/
+tnsnames.ora
+sqlnet.ora
+listener.ora
+cwallet.sso
+
+# Local editor state
+.vs/
+.vscode/
+Thumbs.db
+Desktop.ini
