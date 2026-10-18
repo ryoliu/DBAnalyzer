@@ -10,7 +10,7 @@
    - WIN2019LAB\LAB2
    - tcp:192.168.56.104,1433
 3. Lab 使用自簽憑證時，勾選 **Trust server certificate**。
-4. 畫面會列出 **WhoIsActive、Blocking、LoginFailed、LongRunning、HighResource**。按 **Deploy** 依序佈署全部項目，下方會顯示執行進度及成功／失敗訊息。
+4. 畫面會列出 **WhoIsActive、Blocking、LoginFailed、LongRunning、HighResource、TableRowCount**。按 **Deploy** 依序佈署全部項目，下方會顯示執行進度及成功／失敗訊息。
 
 使用目前 Windows 程序的帳號進行 Windows 驗證，該帳號須有 SQL Server sysadmin 權限。Instance 輸入框不會變更登入身分。
 
@@ -43,6 +43,7 @@ DBAnalyzer/
     LoginFailed/
     LongRunning/
     HighResource/
+    TableRowCount/
     Jobs/
   Deploy_GUI.cmd
   Deploy_GUI.ps1
@@ -63,7 +64,8 @@ DBAnalyzer/
 6. Features/LoginFailed/Deploy_DBAnalyzer_LoginFailed.sql
 7. Features/LongRunning/Deploy_DBAnalyzer_LongRunning.sql
 8. Features/HighResource/Deploy_DBAnalyzer_HighResource.sql
-9. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
+9. Features/TableRowCount/Deploy_DBAnalyzer_TableRowCount.sql
+10. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
 
 SQL 發生錯誤會停止並顯示檔名與批次。已完成的 SQL 不會整套回滾，修正後可重新部署。部署時請避開排程執行時間。
 
@@ -85,13 +87,16 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 |---|---|
 |WhoIsActive 收集（首次安裝預設）|每分鐘，保留 7 天|
 |`_DBAnalyzer-Daily`：依序分析前一天 Blocking、登入失敗、長時間 SQL、高資源 SQL|每日 02:00|
+|同一 Job 第 5 步：擷取當天資料表估計筆數|前四步成功後執行|
 |Blocking 清除 30 天前日報|每日 03:10|
 
-每日分析 Job 有四個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；DBAnalyzer 中的分析資料與執行紀錄保留。
+每日分析 Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；DBAnalyzer 中的分析資料與執行紀錄保留。
 
 長時間 SQL 預設門檻為 300 秒，將同一 Request 的採樣合併成一筆，排除閒置連線與系統背景工作。說明及手動執行範例見 `Features/LongRunning` 資料夾。
 
 高資源 SQL 分別保留 CPU 及邏輯讀取量前 20 名，以同一 Request 的累計採樣最大值排名，不重複加總。說明及查詢範例見 `Features/HighResource` 資料夾。
+
+資料表快照同時記錄中繼資料估計筆數及 UsedMB，統計所有使用者資料庫，排除 DBAnalyzer 與 MS_PERF_COLLECTION。UsedMB 包含本表各索引分割區的資料、索引與 LOB 已使用頁面。每天一份當下快照，分別計算筆數與容量的淨增減、平均每日淨增長；只有一份有效快照時平均為 NULL，舊快照缺少容量時不回填。說明及查詢範例見 `Features/TableRowCount` 資料夾。
 
 ## SQL 可讀性
 

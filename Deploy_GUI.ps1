@@ -42,9 +42,10 @@ $trustCheck.SetBounds(20,112,700,26)
 $form.Controls.Add($trustCheck)
 
 $componentsLabel=[System.Windows.Forms.Label]::new()
-$componentsLabel.Text="Components: WhoIsActive, Blocking, LoginFailed, LongRunning, HighResource"+[Environment]::NewLine+
-    'LongRunning: 300 seconds. HighResource: top 20 requests by CPU and logical reads.'
-$componentsLabel.SetBounds(20,150,700,54)
+$componentsLabel.Text="Components: WhoIsActive, Blocking, LoginFailed"+[Environment]::NewLine+
+    'LongRunning, HighResource, TableRowCount'+[Environment]::NewLine+
+    'LongRunning: 300 seconds. HighResource: top 20. TableRowCount: rows and UsedMB.'
+$componentsLabel.SetBounds(20,150,700,64)
 $form.Controls.Add($componentsLabel)
 
 $deployButton=[System.Windows.Forms.Button]::new()

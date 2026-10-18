@@ -24,15 +24,15 @@ BEGIN TRY
  IF @JobId IS NULL
  BEGIN
   EXEC dbo.sp_add_job @job_name=N'_DBAnalyzer-Daily',@enabled=0,
-   @description=N'Daily blocking, failed-login, long-running, and high-resource SQL reports.',
+   @description=N'Daily SQL analysis and current table row-count snapshots.',
    @owner_login_name=@Owner,@job_id=@JobId OUTPUT;
   EXEC dbo.sp_add_jobserver @job_id=@JobId;
  END
  ELSE
   EXEC dbo.sp_update_job @job_id=@JobId,@enabled=0,@new_name=N'_DBAnalyzer-Daily',
-   @description=N'Daily blocking, failed-login, long-running, and high-resource SQL reports.';
+   @description=N'Daily SQL analysis and current table row-count snapshots.';
 
- IF EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id>4)
+ IF EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id>5)
   THROW 54203,'Unexpected job steps exist; resolve before deploying.',1;
 
  -- Create missing steps, then configure new and existing steps in one place.
@@ -65,6 +65,14 @@ BEGIN TRY
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
+  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
+
+ SET @StepCommand=N'EXEC dbo.usp_CaptureTableRowCount @ReturnResults=0;';
+ IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=5)
+  EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=5,@step_name=N'Capture table row counts',
+   @subsystem=N'TSQL',@command=@StepCommand;
+ EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=5,@step_name=N'Capture table row counts',
   @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
 

@@ -15,6 +15,7 @@ $files=@(
     'Features\LoginFailed\Deploy_DBAnalyzer_LoginFailed.sql',
     'Features\LongRunning\Deploy_DBAnalyzer_LongRunning.sql',
     'Features\HighResource\Deploy_DBAnalyzer_HighResource.sql',
+    'Features\TableRowCount\Deploy_DBAnalyzer_TableRowCount.sql',
     'Features\Jobs\Deploy_DBAnalyzer_Jobs.sql'
 )
 
