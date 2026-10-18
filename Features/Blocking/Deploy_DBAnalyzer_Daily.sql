@@ -257,6 +257,15 @@ JOIN #Resolved AS r ON r.edge_id = e.edge_id
       OR (r.root_blocker_login_time IS NULL AND i.root_blocker_login_time IS NULL))
  AND r.resolution_status = i.resolution_status;
 
+-- Summarize victims once per incident before joining the incident report.
+SELECT incident_id, COUNT(*) AS victim_count,
+       STRING_AGG(CONVERT(nvarchar(max), CONCAT(session_id, N'@',
+           COALESCE(CONVERT(nvarchar(23), login_time, 121), N'unknown'))), N', ')
+           WITHIN GROUP (ORDER BY session_id, login_time) AS victim_sessions
+INTO #VictimSummary
+FROM #Victims
+GROUP BY incident_id;
+
 -- Result 1: one row per incident. end_time is unknown for right-censored
 -- incidents. Duration is the observed span, not the true blocking duration.
 SELECT i.incident_id,
@@ -276,7 +285,7 @@ SELECT i.incident_id,
        i.root_blocker_login_time AS blocker_login_time,
        i.resolution_status,
        i.observed_sample_count,
-       v.victim_count, v.victim_sessions,
+       ISNULL(v.victim_count, 0) AS victim_count, v.victim_sessions,
        b.database_name AS blocker_database_name,
        b.login_name AS blocker_login_name, b.host_name AS blocker_host_name,
        b.program_name AS blocker_program_name,
@@ -284,14 +293,7 @@ SELECT i.incident_id,
 INTO #IncidentResults
 FROM #Incidents AS i
 LEFT JOIN #Samples AS next_sample ON next_sample.sample_no = i.last_sample_no + 1
-OUTER APPLY
-(
-    SELECT COUNT(*) AS victim_count,
-           STRING_AGG(CONVERT(nvarchar(max), CONCAT(session_id, N'@',
-               COALESCE(CONVERT(nvarchar(23), login_time, 121), N'unknown'))), N', ')
-               WITHIN GROUP (ORDER BY session_id, login_time) AS victim_sessions
-    FROM #Victims AS v WHERE v.incident_id = i.incident_id
-) AS v
+LEFT JOIN #VictimSummary AS v ON v.incident_id = i.incident_id
 LEFT JOIN #Sessions AS b
   ON b.collection_time = i.start_time AND b.session_id = i.root_blocker_session_id
 ;
@@ -338,10 +340,38 @@ LEFT JOIN #Sessions AS b
    WHERE r.run_mode='DAILY' AND r.analysis_date=@AnalysisDate AND r.is_current_daily=1;
   UPDATE dbo.BlockingAnalysisRun SET is_current_daily=0
    WHERE run_mode='DAILY' AND analysis_date=@AnalysisDate AND is_current_daily=1;
-  INSERT dbo.BlockingIncident(analysis_run_id,incident_id,start_time,end_time,last_observed_time,observed_duration_seconds,boundary_observed_at,end_status,starts_at_window_boundary,blocker_session_id,blocker_login_time,resolution_status,observed_sample_count,victim_count,victim_sessions,blocker_database_name,blocker_login_name,blocker_host_name,blocker_program_name,blocker_sql,blocker_batch)
-   SELECT @AnalysisRunId,incident_id,start_time,end_time,last_observed_time,observed_duration_seconds,boundary_observed_at,end_status,starts_at_window_boundary,blocker_session_id,blocker_login_time,resolution_status,observed_sample_count,victim_count,victim_sessions,blocker_database_name,blocker_login_name,blocker_host_name,blocker_program_name,blocker_sql,blocker_batch FROM #IncidentResults;
-  INSERT dbo.BlockingDetail(analysis_run_id,incident_id,collection_time,root_blocker_session_id,root_blocker_login_time,direct_blocker_session_id,direct_blocker_login_time,victim_session_id,victim_login_time,victim_request_id,victim_request_start_time,victim_database_name,victim_login_name,victim_host_name,victim_program_name,victim_status,wait_info,blocking_chain,resolution_status,victim_sql,victim_batch,direct_blocker_sql,direct_blocker_batch,root_blocker_sql,root_blocker_batch)
-   SELECT @AnalysisRunId,incident_id,collection_time,root_blocker_session_id,root_blocker_login_time,direct_blocker_session_id,direct_blocker_login_time,victim_session_id,victim_login_time,victim_request_id,victim_request_start_time,victim_database_name,victim_login_name,victim_host_name,victim_program_name,victim_status,wait_info,blocking_chain,resolution_status,victim_sql,victim_batch,direct_blocker_sql,direct_blocker_batch,root_blocker_sql,root_blocker_batch FROM #DetailResults;
+  INSERT dbo.BlockingIncident(
+   analysis_run_id, incident_id, start_time, end_time,
+   last_observed_time, observed_duration_seconds, boundary_observed_at, end_status,
+   starts_at_window_boundary, blocker_session_id, blocker_login_time, resolution_status,
+   observed_sample_count, victim_count, victim_sessions, blocker_database_name,
+   blocker_login_name, blocker_host_name, blocker_program_name, blocker_sql,
+   blocker_batch)
+  SELECT
+   @AnalysisRunId, incident_id, start_time, end_time,
+   last_observed_time, observed_duration_seconds, boundary_observed_at, end_status,
+   starts_at_window_boundary, blocker_session_id, blocker_login_time, resolution_status,
+   observed_sample_count, victim_count, victim_sessions, blocker_database_name,
+   blocker_login_name, blocker_host_name, blocker_program_name, blocker_sql,
+   blocker_batch
+  FROM #IncidentResults;
+  INSERT dbo.BlockingDetail(
+   analysis_run_id, incident_id, collection_time, root_blocker_session_id,
+   root_blocker_login_time, direct_blocker_session_id, direct_blocker_login_time, victim_session_id,
+   victim_login_time, victim_request_id, victim_request_start_time, victim_database_name,
+   victim_login_name, victim_host_name, victim_program_name, victim_status,
+   wait_info, blocking_chain, resolution_status, victim_sql,
+   victim_batch, direct_blocker_sql, direct_blocker_batch, root_blocker_sql,
+   root_blocker_batch)
+  SELECT
+   @AnalysisRunId, incident_id, collection_time, root_blocker_session_id,
+   root_blocker_login_time, direct_blocker_session_id, direct_blocker_login_time, victim_session_id,
+   victim_login_time, victim_request_id, victim_request_start_time, victim_database_name,
+   victim_login_name, victim_host_name, victim_program_name, victim_status,
+   wait_info, blocking_chain, resolution_status, victim_sql,
+   victim_batch, direct_blocker_sql, direct_blocker_batch, root_blocker_sql,
+   root_blocker_batch
+  FROM #DetailResults;
   UPDATE dbo.BlockingAnalysisRun
    SET status='SUCCEEDED',completed_at_utc=SYSUTCDATETIME(),is_current_daily=1,
        captured_row_count=(SELECT COUNT_BIG(*) FROM #Capture),

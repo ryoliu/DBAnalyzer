@@ -13,6 +13,8 @@ WhoIsActive 保持每分鐘收集、來源保留 7 天。原本每 5 分鐘的�
 
 ## 執行與查詢
 
+受害者名單先以 `#VictimSummary` 分組，再 LEFT JOIN 事件，方便逐段查看彙總結果。Blocking 樹的遞迴追蹤、循環偵測、特殊 Blocker、缺漏採樣及 90 秒切段邏輯保留原寫法，避免簡化後改變事件判斷。
+
 `Run_BlockingAnalyzer.sql` 提供範例。SP 只有三個參數：`@AnalysisDate`、`@ReturnResults`、`@AnalysisRunId OUTPUT`。不指定日期即分析 VM 當地時間的前一天；指定當天則產生尚未完整的當日日報。時間不自動轉換為台灣時間。
 
 報表查 `dbo.vBlockingIncident`、`dbo.vBlockingDetail`，以 `analysis_date` 篩選日期。執行紀錄查 `dbo.BlockingAnalysisRun`。`is_current_daily=1` 表示該日期目前有效的日報，成功重跑前的執行紀錄保留，但其事件與明細被取代。事件編號只屬於該次日報，不保證重跑後不變。

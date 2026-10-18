@@ -209,19 +209,25 @@ BEGIN
         HAVING SUM(CASE WHEN log_text LIKE N'Login failed for user %' THEN 1 ELSE 0 END) = 1
            AND SUM(CASE WHEN log_text LIKE N'Error: %, Severity: %, State: %.' THEN 1 ELSE 0 END) = 1;
 
-        UPDATE f SET error_header = h.error_header
-        FROM #Failures f JOIN #Headers h
+        -- Name each position before extracting the header values.
+        SELECT *,
+            CHARINDEX(N',', error_header) AS error_end,
+            CHARINDEX(N'Severity:', error_header) + LEN(N'Severity:') AS severity_start,
+            CHARINDEX(N', State:', error_header) AS severity_end,
+            CHARINDEX(N'State:', error_header) + LEN(N'State:') AS state_start
+        INTO #HeaderPositions
+        FROM #Headers;
+
+        UPDATE f
+        SET error_header = h.error_header,
+            error_number = TRY_CONVERT(int, REPLACE(LEFT(h.error_header, h.error_end - 1), N'Error:', N'')),
+            severity = TRY_CONVERT(int, SUBSTRING(h.error_header, h.severity_start,
+                                                 h.severity_end - h.severity_start)),
+            error_state = TRY_CONVERT(int, REPLACE(SUBSTRING(h.error_header, h.state_start,
+                                                            LEN(h.error_header)), N'.', N''))
+        FROM #Failures f JOIN #HeaderPositions h
           ON h.archive_number = f.archive_number AND h.log_date = f.log_date
          AND h.process_info = f.process_info;
-
-        UPDATE #Failures
-        SET error_number = TRY_CONVERT(int, REPLACE(LEFT(error_header,
-                           CHARINDEX(N',', error_header) - 1), N'Error:', N'')),
-            severity = TRY_CONVERT(int, SUBSTRING(error_header,
-                       CHARINDEX(N'Severity:', error_header) + LEN(N'Severity:'),
-                       CHARINDEX(N', State:', error_header) - CHARINDEX(N'Severity:', error_header) - LEN(N'Severity:'))),
-            error_state = TRY_CONVERT(int, REPLACE(SUBSTRING(error_header,
-                          CHARINDEX(N'State:', error_header) + LEN(N'State:'), LEN(error_header)), N'.', N''));
 
         -- 5. Replace this date's details and summary in one transaction.
         BEGIN TRANSACTION;

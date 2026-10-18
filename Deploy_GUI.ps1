@@ -14,7 +14,7 @@ $script:currentLog=$null
 
 $form=[System.Windows.Forms.Form]::new()
 $form.Text='DBAnalyzer Deployment'
-$form.ClientSize=[System.Drawing.Size]::new(740,460)
+$form.ClientSize=[System.Drawing.Size]::new(740,530)
 $form.StartPosition='CenterScreen'
 $form.FormBorderStyle='FixedDialog'
 $form.MaximizeBox=$false
@@ -41,14 +41,20 @@ $trustCheck.Text='Trust server certificate (for a self-signed certificate)'
 $trustCheck.SetBounds(20,112,700,26)
 $form.Controls.Add($trustCheck)
 
+$componentsLabel=[System.Windows.Forms.Label]::new()
+$componentsLabel.Text="Components: WhoIsActive, Blocking, LoginFailed, LongRunning, HighResource"+[Environment]::NewLine+
+    'LongRunning: 300 seconds. HighResource: top 20 requests by CPU and logical reads.'
+$componentsLabel.SetBounds(20,150,700,54)
+$form.Controls.Add($componentsLabel)
+
 $deployButton=[System.Windows.Forms.Button]::new()
 $deployButton.Text='Deploy'
-$deployButton.SetBounds(20,150,120,36)
+$deployButton.SetBounds(20,220,120,36)
 $form.Controls.Add($deployButton)
 
 $closeButton=[System.Windows.Forms.Button]::new()
 $closeButton.Text='Close'
-$closeButton.SetBounds(152,150,120,36)
+$closeButton.SetBounds(152,220,120,36)
 $closeButton.Add_Click({$form.Close()})
 $form.Controls.Add($closeButton)
 $form.AcceptButton=$deployButton
@@ -56,7 +62,7 @@ $form.CancelButton=$closeButton
 
 $statusLabel=[System.Windows.Forms.Label]::new()
 $statusLabel.Text='Ready. Authentication uses the current Windows account.'
-$statusLabel.SetBounds(20,198,700,24)
+$statusLabel.SetBounds(20,268,700,24)
 $form.Controls.Add($statusLabel)
 
 $outputText=[System.Windows.Forms.TextBox]::new()
@@ -65,7 +71,7 @@ $outputText.ReadOnly=$true
 $outputText.ScrollBars='Vertical'
 $outputText.WordWrap=$true
 $outputText.Font=[System.Drawing.Font]::new('Consolas',9)
-$outputText.SetBounds(20,230,700,210)
+$outputText.SetBounds(20,300,700,210)
 $form.Controls.Add($outputText)
 
 $timer=[System.Windows.Forms.Timer]::new()
@@ -89,7 +95,7 @@ $timer.Add_Tick({
         $outputText.Text=$standardOutput
         if($errorOutput){$outputText.AppendText([Environment]::NewLine+$errorOutput)}
         if($script:deployProcess.ExitCode -eq 0) {
-            $statusLabel.Text='Deployment completed. Daily analysis and cleanup jobs are enabled.'
+            $statusLabel.Text='Deployment completed. All components and jobs are ready.'
             $statusLabel.ForeColor=[System.Drawing.Color]::DarkGreen
         }else{
             $statusLabel.Text='Deployment failed. See the output below.'

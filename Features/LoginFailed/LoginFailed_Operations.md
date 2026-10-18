@@ -23,6 +23,8 @@
 
 SP 已改為五段直線流程：記錄執行與檢查稽核、WHILE 讀取各個 ERRORLOG、以具名字串位置及 UPDATE 解析、以 GROUP BY／JOIN 配對錯誤標頭、在交易內取代明細並重建摘要。SP 本身不使用 CROSS APPLY、OUTER APPLY 或 PARSENAME，不增加其他輔助 SP；分類仍沿用既有的 vLoginFailedClassified。
 
+錯誤標頭另以 `#HeaderPositions` 記錄 Error、Severity、State 的起訖位置，再 JOIN 回明細解析，避免同一個 SUBSTRING 裡反覆計算字串位置；唯一配對條件、無法配對時保留 NULL 的行為不變。
+
 已比對 12 組訊息格式與原版解析結果，並驗證實際 6 筆登入失敗的明細、Error／State 及摘要完全一致，同日重跑沒有累加。
 
 此版本配合目前伺服器的英文 ERRORLOG，將 `Login failed for user ...` 每一行視為一筆失敗訊息，保留完整 `raw_message`。從原文擷取 `login_name`、`client_address`、`failure_reason`。來源可能是 IP、主機文字或 `<local machine>`，不強制當成 IP。

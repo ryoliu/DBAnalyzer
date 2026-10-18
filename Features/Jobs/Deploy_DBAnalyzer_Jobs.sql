@@ -13,49 +13,60 @@ BEGIN TRY
   THROW 54200,'An analysis job is running or queued. Wait and deploy again.',1;
 
  DECLARE @JobId uniqueidentifier,@ScheduleId int,@OldScheduleId int,
-         @Owner sysname=SUSER_SNAME(0x01),@OldName sysname;
+         @Owner sysname=SUSER_SNAME(0x01),@StepCommand nvarchar(max);
  IF @Owner IS NULL THROW 54201,'The server administrator SID could not be resolved.',1;
  IF (SELECT COUNT(*) FROM dbo.sysjobs WHERE name IN
   (N'_DBAnalyzer-Daily',N'_DBAnalyzer-Blocking-Daily',N'_DBAnalyzer-Blocking-Incremental'))>1
   THROW 54202,'Multiple blocking analysis jobs exist; resolve before deploying.',1;
 
- SELECT @JobId=job_id,@OldName=name FROM dbo.sysjobs WHERE name IN
+ SELECT @JobId=job_id FROM dbo.sysjobs WHERE name IN
   (N'_DBAnalyzer-Daily',N'_DBAnalyzer-Blocking-Daily',N'_DBAnalyzer-Blocking-Incremental');
  IF @JobId IS NULL
  BEGIN
   EXEC dbo.sp_add_job @job_name=N'_DBAnalyzer-Daily',@enabled=0,
-   @description=N'Analyze blocking and failed logins for the previous server-local day.',
+   @description=N'Daily blocking, failed-login, long-running, and high-resource SQL reports.',
    @owner_login_name=@Owner,@job_id=@JobId OUTPUT;
   EXEC dbo.sp_add_jobserver @job_id=@JobId;
  END
  ELSE
   EXEC dbo.sp_update_job @job_id=@JobId,@enabled=0,@new_name=N'_DBAnalyzer-Daily',
-   @description=N'Analyze blocking and failed logins for the previous server-local day.';
+   @description=N'Daily blocking, failed-login, long-running, and high-resource SQL reports.';
 
- IF EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id>2)
+ IF EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id>4)
   THROW 54203,'Unexpected job steps exist; resolve before deploying.',1;
 
+ -- Create missing steps, then configure new and existing steps in one place.
+ SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveBlocking @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=1)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Analyze blocking',
-   @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-   @command=N'EXEC dbo.usp_AnalyzeWhoIsActiveBlocking @ReturnResults=0;',
-   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
- ELSE
-  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Analyze blocking',
-   @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-   @command=N'EXEC dbo.usp_AnalyzeWhoIsActiveBlocking @ReturnResults=0;',
-   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
+   @subsystem=N'TSQL',@command=@StepCommand;
+ EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Analyze blocking',
+  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
 
+ SET @StepCommand=N'EXEC dbo.usp_AnalyzeLoginFailed @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=2)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Collect failed logins',
-   @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-   @command=N'EXEC dbo.usp_AnalyzeLoginFailed @ReturnResults=0;',
-   @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
- ELSE
-  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Collect failed logins',
-   @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-   @command=N'EXEC dbo.usp_AnalyzeLoginFailed @ReturnResults=0;',
-   @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
+   @subsystem=N'TSQL',@command=@StepCommand;
+ EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Collect failed logins',
+  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
+
+ SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveLongRunning @ReturnResults=0;';
+ IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=3)
+  EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=3,@step_name=N'Analyze long-running SQL',
+   @subsystem=N'TSQL',@command=@StepCommand;
+ EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=3,@step_name=N'Analyze long-running SQL',
+  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
+
+ SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveHighResource @ReturnResults=0;';
+ IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=4)
+  EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
+   @subsystem=N'TSQL',@command=@StepCommand;
+ EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
+  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
 
  SELECT @OldScheduleId=js.schedule_id FROM dbo.sysjobschedules js
  JOIN dbo.sysschedules s ON s.schedule_id=js.schedule_id

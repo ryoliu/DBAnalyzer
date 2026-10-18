@@ -30,7 +30,7 @@ IF EXISTS(
  SELECT 1 FROM(VALUES(N'collection_time'),(N'session_id'),(N'request_id'),
   (N'login_time'),(N'start_time'),(N'blocking_session_id'),(N'database_name'),
   (N'login_name'),(N'host_name'),(N'program_name'),(N'status'),(N'wait_info'),
-  (N'sql_text'),(N'sql_command')) v(column_name)
+  (N'sql_text'),(N'sql_command'),(N'CPU'),(N'reads')) v(column_name)
  WHERE NOT EXISTS(SELECT 1 FROM sys.columns c
   WHERE c.object_id=OBJECT_ID(N'dbo.WHOISACTIVE') AND c.name=v.column_name))
  THROW 57008,'The WhoIsActive source table is missing required columns.',1;
