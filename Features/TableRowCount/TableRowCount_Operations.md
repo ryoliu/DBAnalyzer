@@ -8,6 +8,7 @@
 |`dbo.TableRowCountRun`|執行狀態、資料庫數、表數、筆數／容量缺值表數及錯誤|
 |`dbo.vTableRowCountGrowth`|與前一份有效快照比較的筆數與容量淨增減|
 |`dbo.vTableRowCountGrowthSummary`|第一份至最後一份有效快照的筆數及容量平均每日增長|
+|`dbo.vTableRowCountForecast`|最近 30 個日曆日期的筆數趨勢，估算最新快照之後 7 天及 30 天的筆數|
 |`_DBAnalyzer-Daily` 第 5 步|每日 VM 當地時間 02:00 啟動，前四步成功後擷取當下筆數|
 
 ## 執行與日期
@@ -52,8 +53,51 @@ UsedMB 包含這些分割區的資料頁、索引、LOB 與 Row-overflow 已使�
 
 未加入自訂執行鎖，手動擷取應與排程錯開。此功能尚未設定自動清除快照或執行紀錄。
 
+## 筆數線性估算
+
+`dbo.vTableRowCountForecast` 是查詢 View，不另外收集或儲存預測結果，也不修改既有平均增長 View。使用 VM 當地今日及前 29 個日期的快照；較早與未來日期不納入。僅列出這個範圍內最新一批快照中的資料表，因此已不在最新快照清單中的舊表不會繼續顯示。若最近 30 個日期都沒有快照，回傳空結果。
+
+同一張表仍以 database ID、database GUID、table object ID、建表時間識別。改名延續趨勢並顯示最新名稱；刪除重建或資料庫 GUID 改變時分開計算。
+
+```text
+Daily growth = (Last valid row count - First valid row count) / Elapsed calendar days
+Estimated rows = MAX(0, Latest row count + Daily growth * Forecast days)
+```
+
+只使用區間首末有效值計算每日淨增長，不對各區間成長率直接取平均，也不擬合迴歸線。中間波動不反映在預測中；漏跑日不補造資料，仍使用實際相隔日曆天數作分母。
+
+至少兩個不同日期的有效筆數才能估算。中間筆數為 NULL 的快照跳過，但若最新快照筆數未知，整筆估算保持 NULL，不拿舊筆數冒充最新筆數。筆數為零屬於有效資料。每日淨增長保留六位小數，估算筆數四捨五入至整數，以 decimal(28,0) 回傳，負值歸零；每日淨增長本身保留負值。
+
+|欄位|說明|
+|---|---|
+|`snapshot_count`|最近 30 個日期內，有效筆數快照的數量|
+|`first_snapshot_date`|第一份有效筆數的日期|
+|`last_snapshot_date`、`captured_at`|最新一批快照日期與該表擷取時間|
+|`snapshot_age_days`|最新快照距 VM 當地今日的日曆天數|
+|`observed_days`|第一份至最後一份有效筆數的相隔天數|
+|`first_row_count`、`last_row_count`|區間第一個有效筆數與最新快照筆數|
+|`avg_daily_net_growth`|區間平均每日淨增長；資料不足或最新筆數未知時為 NULL|
+|`forecast_status`|`ESTIMATE`、`INSUFFICIENT_HISTORY` 或 `UNKNOWN_COUNT`|
+|`forecast_date_7d`、`estimated_row_count_7d`|最新快照之後 7 天的目標日期與估算筆數|
+|`forecast_date_30d`、`estimated_row_count_30d`|最新快照之後 30 天的目標日期與估算筆數|
+
+預測日期從最新快照起算，不從查詢當日開始算。快照過期時仍顯示原基準日期的估算，請搭配 `snapshot_age_days` 與目標日期判讀。`ESTIMATE` 僅代表資料足以計算，不代表已驗證準確度；尤其只有兩份快照、觀察一天時，只是在延伸一天的淨增減。定期清檔、大批匯入、成長模式改變均可能使推估偏離實際。
+
+```sql
+SELECT database_name,schema_name,table_name,forecast_status,
+ first_snapshot_date,last_snapshot_date,snapshot_age_days,snapshot_count,observed_days,
+ last_row_count,avg_daily_net_growth,
+ forecast_date_7d,estimated_row_count_7d,forecast_date_30d,estimated_row_count_30d
+FROM DBAnalyzer.dbo.vTableRowCountForecast
+ORDER BY estimated_row_count_30d DESC,database_name,schema_name,table_name;
+```
+
 ## 驗證
 
 已在 WIN2019LAB 擷取 Core、Monitor、BlockingTestLab，共 3 個資料庫、14 張資料表，排除監控資料庫。同日重跑沒有累加快照。平均值另以暫存資料驗證漏跑、資料減少、改名、重建、第一天空表及未知筆數；未在正式資料表製造歷史筆數。
 
 UsedMB 已驗證筆數不變而容量增加、容量減少、歷史容量缺值及獨立日期區間。另建立含 LOB 的 100 筆測試表，新增非叢集索引後筆數仍為 100，UsedMB 從 0.9765625 增為 0.9921875，正確包含索引的 2 個使用頁面與 123 個 LOB 使用頁面。測試表已移除，正式當日快照已重新擷取。
+
+2026-10-20 已在 WIN2019LAB 的隔離 tempdb schema，以實際 View 定義驗證 30 日期邊界、漏跑、缺值、單份歷史、負成長、空表、小數四捨五入、大筆數、改名、資料表／資料庫重建、舊表排除、未來日期、過期快照及空歷史。測試交易已回滾，測試物件已清除。
+
+測試通過後只部署新增的 `vTableRowCountForecast`。既有 28 筆快照、9 筆執行紀錄，以及收集 SP 與兩個成長 View 的定義雜湊部署前後相同；未執行收集。實際回傳 14 張表，每張表有 2026-10-18、2026-10-19 兩份快照，觀察跨度均為 1 天，尚非 30 天的歷史樣本。部署紀錄保存於 `DeploymentLogs/TableRowCountForecast-20261020T045948437Z/`。

@@ -16,7 +16,8 @@ $files=@(
     'Features\LongRunning\Deploy_DBAnalyzer_LongRunning.sql',
     'Features\HighResource\Deploy_DBAnalyzer_HighResource.sql',
     'Features\TableRowCount\Deploy_DBAnalyzer_TableRowCount.sql',
-    'Features\Jobs\Deploy_DBAnalyzer_Jobs.sql'
+    'Features\Jobs\Deploy_DBAnalyzer_Jobs.sql',
+    'Features\Maintance\_MaintanceJob.sql'
 )
 
 # Use the current Windows account.
@@ -50,6 +51,10 @@ try {
 
     foreach($file in $files) {
         Write-Host ('Running '+$file)
+        if($file -eq 'Features\Maintance\_MaintanceJob.sql') {
+            $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobactivity a JOIN msdb.dbo.sysjobs j ON j.job_id=a.job_id WHERE j.name IN(N'_BackupFull-Split',N'_BackupTransactionLog-Split',N'_Maintenance.EveryDay') AND a.session_id=(SELECT MAX(session_id) FROM msdb.dbo.syssessions) AND a.run_requested_date IS NOT NULL AND a.stop_execution_date IS NULL;"
+            if([int]$command.ExecuteScalar() -gt 0){throw 'A maintenance or backup job is running or queued. Retry deployment later.'}
+        }
         $sql=Get-Content -LiteralPath (Join-Path $PSScriptRoot $file) -Raw -Encoding UTF8
         if($file -eq 'Features\WhoIsActive\WhoIsActive_11_Deployment_In_Once.sql') {
             $command.CommandText="SELECT OBJECT_ID(N'MS_PERF_COLLECTION.dbo.sp_WhoIsActive',N'P');"
@@ -77,6 +82,8 @@ try {
 
     $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE enabled=1 AND name IN(N'_DBAnalyzer-Daily',N'_DBAnalyzer-Blocking-Cleanup');"
     if([int]$command.ExecuteScalar() -ne 2){throw 'Expected two enabled jobs: daily analysis and cleanup.'}
+    $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE (enabled=1 AND name=N'_Maintenance.EveryDay') OR (enabled=0 AND name IN(N'_BackupFull-Split',N'_BackupTransactionLog-Split'));"
+    if([int]$command.ExecuteScalar() -ne 3){throw 'Expected an enabled maintenance job and two disabled backup jobs.'}
     Write-Host 'Deployment completed. All components and jobs are ready.'
 }
 finally {

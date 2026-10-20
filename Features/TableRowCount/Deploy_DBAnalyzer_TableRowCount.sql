@@ -133,6 +133,49 @@ LEFT JOIN dbo.TableRowCountSnapshot last_size
  AND last_size.table_object_id=sizes.table_object_id AND last_size.table_create_date=sizes.table_create_date
  AND last_size.snapshot_date=sizes.last_size_snapshot_date;
 GO
+CREATE OR ALTER VIEW dbo.vTableRowCountForecast
+AS
+WITH Recent AS(
+ SELECT * FROM dbo.TableRowCountSnapshot
+ WHERE snapshot_date>=DATEADD(DAY,-29,CONVERT(date,GETDATE()))
+   AND snapshot_date<=CONVERT(date,GETDATE())
+), History AS(
+ SELECT database_id,database_guid,table_object_id,table_create_date,
+  COUNT(*) AS snapshot_count,MIN(snapshot_date) AS first_snapshot_date,
+  MAX(snapshot_date) AS last_valid_snapshot_date
+ FROM Recent WHERE row_count IS NOT NULL
+ GROUP BY database_id,database_guid,table_object_id,table_create_date
+), Trend AS(
+ SELECT latest.database_name,latest.schema_name,latest.table_name,
+  latest.database_id,latest.database_guid,latest.table_object_id,latest.table_create_date,
+  ISNULL(history.snapshot_count,0) AS snapshot_count,history.first_snapshot_date,
+  latest.snapshot_date AS last_snapshot_date,latest.captured_at,
+  DATEDIFF(DAY,latest.snapshot_date,CONVERT(date,GETDATE())) AS snapshot_age_days,
+  DATEDIFF(DAY,history.first_snapshot_date,history.last_valid_snapshot_date) AS observed_days,
+  first_count.row_count AS first_row_count,latest.row_count AS last_row_count,
+  CONVERT(decimal(28,6),(CONVERT(decimal(28,6),latest.row_count)-first_count.row_count)
+   /NULLIF(DATEDIFF(DAY,history.first_snapshot_date,history.last_valid_snapshot_date),0)) AS avg_daily_net_growth
+ FROM Recent latest
+ LEFT JOIN History history
+  ON history.database_id=latest.database_id AND history.database_guid=latest.database_guid
+  AND history.table_object_id=latest.table_object_id AND history.table_create_date=latest.table_create_date
+ LEFT JOIN Recent first_count
+  ON first_count.database_id=history.database_id AND first_count.database_guid=history.database_guid
+  AND first_count.table_object_id=history.table_object_id AND first_count.table_create_date=history.table_create_date
+  AND first_count.snapshot_date=history.first_snapshot_date
+ WHERE latest.snapshot_date=(SELECT MAX(snapshot_date) FROM Recent)
+)
+SELECT *,
+ CONVERT(varchar(24),CASE WHEN last_row_count IS NULL THEN 'UNKNOWN_COUNT'
+  WHEN snapshot_count<2 THEN 'INSUFFICIENT_HISTORY' ELSE 'ESTIMATE' END) AS forecast_status,
+ DATEADD(DAY,7,last_snapshot_date) AS forecast_date_7d,
+ CONVERT(decimal(28,0),CASE WHEN last_row_count+avg_daily_net_growth*7<0 THEN 0
+  ELSE last_row_count+avg_daily_net_growth*7 END) AS estimated_row_count_7d,
+ DATEADD(DAY,30,last_snapshot_date) AS forecast_date_30d,
+ CONVERT(decimal(28,0),CASE WHEN last_row_count+avg_daily_net_growth*30<0 THEN 0
+  ELSE last_row_count+avg_daily_net_growth*30 END) AS estimated_row_count_30d
+FROM Trend;
+GO
 CREATE OR ALTER PROCEDURE dbo.usp_CaptureTableRowCount
  @ReturnResults bit=1,
  @CaptureRunId bigint=NULL OUTPUT

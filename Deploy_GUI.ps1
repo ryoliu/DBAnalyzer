@@ -43,7 +43,7 @@ $form.Controls.Add($trustCheck)
 
 $componentsLabel=[System.Windows.Forms.Label]::new()
 $componentsLabel.Text="Components: WhoIsActive, Blocking, LoginFailed"+[Environment]::NewLine+
-    'LongRunning, HighResource, TableRowCount'+[Environment]::NewLine+
+    'LongRunning, HighResource, TableRowCount, Maintance'+[Environment]::NewLine+
     'LongRunning: 300 seconds. HighResource: top 20. TableRowCount: rows and UsedMB.'
 $componentsLabel.SetBounds(20,150,700,64)
 $form.Controls.Add($componentsLabel)

@@ -103,7 +103,9 @@ GO
 CREATE OR ALTER PROCEDURE dbo.usp_AnalyzeLoginFailed
     @AnalysisDate date = NULL,
     @ReturnResults bit = 1,
-    @AnalysisRunId bigint = NULL OUTPUT
+    @AnalysisRunId bigint = NULL OUTPUT,
+    @MaxArchiveNo int = 10,
+    @RetentionDays int = 30
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -116,11 +118,22 @@ BEGIN
         SET @AnalysisDate = DATEADD(DAY, -1, CONVERT(date, GETDATE()));
     IF @AnalysisDate > CONVERT(date, GETDATE())
         THROW 56001, 'AnalysisDate must not be in the future.', 1;
+    IF @MaxArchiveNo IS NULL OR @MaxArchiveNo < 0
+        THROW 56004, 'MaxArchiveNo must be zero or greater.', 1;
+    IF @RetentionDays IS NULL OR @RetentionDays < 1
+        THROW 56005, 'RetentionDays must be greater than zero.', 1;
+
+    DECLARE @KeepFromDate date = DATEADD(DAY, -@RetentionDays, CONVERT(date, GETDATE()));
+    IF @AnalysisDate < @KeepFromDate OR @AnalysisDate < CONVERT(date, '17530101')
+        THROW 56006, 'AnalysisDate is outside the supported retention window. Increase RetentionDays if needed.', 1;
 
     DECLARE @FromTime datetime = CONVERT(datetime, @AnalysisDate);
     DECLARE @ToTime datetime = DATEADD(DAY, 1, @FromTime);
+    DECLARE @ReadUntil datetime = GETDATE(), @OldestTime datetime, @CurrentFirstTime datetime;
     DECLARE @LogNumber int, @LastLogNumber int, @ArchivesScanned int = 0;
-    DECLARE @FailureCount bigint, @AuditLevel nvarchar(128);
+    DECLARE @FailureCount bigint, @AuditLevel nvarchar(128), @AuditValue int;
+    DECLARE @LockResult int, @LockTaken bit = 0;
+    IF @ReadUntil > @ToTime SET @ReadUntil = @ToTime;
 
     BEGIN TRY
         -- 1. Record the run and check login auditing.
@@ -131,16 +144,27 @@ BEGIN
              SYSDATETIMEOFFSET(), 'RUNNING');
         SET @AnalysisRunId = CONVERT(bigint, SCOPE_IDENTITY());
 
-        CREATE TABLE #AuditLevel (config_name nvarchar(128), config_value nvarchar(128));
-        INSERT #AuditLevel EXEC master.dbo.xp_loginconfig N'audit level';
-        SELECT @AuditLevel = config_value FROM #AuditLevel WHERE config_name = N'audit level';
+        -- Serialize collection and retention across all dates.
+        EXEC @LockResult = sys.sp_getapplock
+            @Resource = N'DBAnalyzer.LoginFailed', @LockMode = N'Exclusive',
+            @LockOwner = N'Session', @LockTimeout = 0, @DbPrincipal = N'public';
+        IF @LockResult < 0
+            THROW 56007, 'Another failed-login collection is running. Retry later.', 1;
+        SET @LockTaken = 1;
+
+        -- Read configured Windows login auditing without changing it.
+        EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE',
+            N'Software\Microsoft\MSSQLServer\MSSQLServer', N'AuditLevel',
+            @AuditValue OUTPUT, N'no_output';
+        SET @AuditLevel = CASE @AuditValue
+            WHEN 0 THEN N'none' WHEN 1 THEN N'success' WHEN 2 THEN N'failure' WHEN 3 THEN N'all' END;
         UPDATE dbo.LoginFailedAnalysisRun SET audit_level = @AuditLevel
         WHERE analysis_run_id = @AnalysisRunId;
         IF @AuditLevel IS NULL OR LOWER(@AuditLevel) NOT IN (N'failure', N'all')
             THROW 56002, 'Login auditing must include failed logins.', 1;
 
         -- 2. Read current and archived ERRORLOG files.
-        CREATE TABLE #Archives (archive_number int, log_date nvarchar(128), log_size bigint);
+        CREATE TABLE #Archives (archive_number int, log_date datetime, log_size bigint);
         INSERT #Archives EXEC master.dbo.sp_enumerrorlogs;
         IF NOT EXISTS (SELECT 1 FROM #Archives)
             THROW 56003, 'No SQL Server error logs were enumerated.', 1;
@@ -148,29 +172,64 @@ BEGIN
         CREATE TABLE #Log (log_date datetime, process_info nvarchar(50), log_text nvarchar(max));
         CREATE TABLE #Messages
             (archive_number int, log_date datetime, process_info nvarchar(50), log_text nvarchar(max));
-        SELECT @LogNumber = MIN(archive_number), @LastLogNumber = MAX(archive_number) FROM #Archives;
+        CREATE TABLE #CurrentFirst (log_date datetime, process_info nvarchar(50), log_text nvarchar(max));
+        SELECT @LastLogNumber = MAX(archive_number) FROM #Archives WHERE archive_number <= @MaxArchiveNo;
+        SET @LogNumber = 0;
 
         WHILE @LogNumber <= @LastLogNumber
         BEGIN
-            IF EXISTS (SELECT 1 FROM #Archives WHERE archive_number = @LogNumber)
+            IF NOT EXISTS (SELECT 1 FROM #Archives WHERE archive_number = @LogNumber)
+                THROW 56008, 'The ERRORLOG archive sequence is incomplete. Existing data was preserved.', 1;
+
+            TRUNCATE TABLE #Log;
+            -- Include earlier rows to prove coverage; read each file only once.
+            INSERT #Log
+                EXEC master.dbo.xp_readerrorlog @LogNumber, 1, NULL, NULL, NULL, @ReadUntil, N'asc';
+            SELECT @OldestTime = MIN(log_date) FROM #Log;
+            IF @LogNumber = 0
             BEGIN
-                TRUNCATE TABLE #Log;
-                INSERT #Log
-                    EXEC master.dbo.xp_readerrorlog @LogNumber, 1, NULL, NULL, @FromTime, @ToTime, N'asc';
-                INSERT #Messages
-                SELECT @LogNumber, log_date, process_info, log_text
-                FROM #Log
-                WHERE log_date >= @FromTime AND log_date < @ToTime
-                  AND (log_text LIKE N'Login failed for user %'
-                       OR log_text LIKE N'Error: %, Severity: %, State: %.');
-                SET @ArchivesScanned = @ArchivesScanned + 1;
+                SET @CurrentFirstTime = @OldestTime;
+                INSERT #CurrentFirst SELECT * FROM #Log WHERE log_date = @CurrentFirstTime;
             END;
+            INSERT #Messages
+            SELECT @LogNumber, log_date, process_info, log_text
+            FROM #Log
+            WHERE log_date >= @FromTime AND log_date < @ToTime
+              AND (log_text LIKE N'Login failed for user %'
+                   OR log_text LIKE N'Error: %, Severity: %, State: %.');
+            SET @ArchivesScanned = @ArchivesScanned + 1;
+            -- A strict boundary includes ties at midnight in the next archive.
+            IF @OldestTime < @FromTime BREAK;
             SET @LogNumber = @LogNumber + 1;
+        END;
+        IF @OldestTime IS NULL OR @OldestTime >= @FromTime
+            THROW 56009, 'ERRORLOG coverage does not reach AnalysisDate. Check retained logs or increase MaxArchiveNo. Existing data was preserved.', 1;
+
+        -- A changed archive list indicates rotation or removal during collection.
+        CREATE TABLE #ArchivesAfter (archive_number int, log_date datetime, log_size bigint);
+        INSERT #ArchivesAfter EXEC master.dbo.sp_enumerrorlogs;
+        IF EXISTS (SELECT * FROM #Archives WHERE archive_number > 0
+                   EXCEPT SELECT * FROM #ArchivesAfter WHERE archive_number > 0)
+           OR EXISTS (SELECT * FROM #ArchivesAfter WHERE archive_number > 0
+                      EXCEPT SELECT * FROM #Archives WHERE archive_number > 0)
+           OR NOT EXISTS (SELECT 1 FROM #ArchivesAfter WHERE archive_number = 0)
+            THROW 56010, 'ERRORLOG files changed during collection. Retry; existing data was preserved.', 1;
+
+        -- Also detect a current-only log being reset, even if its new size grows.
+        IF @CurrentFirstTime IS NOT NULL
+        BEGIN
+            TRUNCATE TABLE #Log;
+            INSERT #Log EXEC master.dbo.xp_readerrorlog 0, 1, NULL, NULL, NULL, @CurrentFirstTime, N'asc';
+            IF EXISTS (SELECT * FROM #CurrentFirst EXCEPT SELECT * FROM #Log)
+               OR EXISTS (SELECT * FROM #Log EXCEPT SELECT * FROM #CurrentFirst)
+                THROW 56010, 'The current ERRORLOG changed during collection. Retry; existing data was preserved.', 1;
         END;
 
         -- 3. Extract account, client and reason using named string positions.
         SELECT *,
             LEN(N'Login failed for user ''') + 1 AS login_start,
+            CONVERT(int, 0) AS login_end,
+            CONVERT(nvarchar(max), NULL) AS login_part,
             CHARINDEX(N'. Reason:', log_text) AS reason_at,
             CHARINDEX(N'. Reason:', log_text) + LEN(N'. Reason:') AS reason_start,
             CHARINDEX(N'[CLIENT:', log_text) AS client_at,
@@ -187,8 +246,19 @@ BEGIN
         WHERE log_text LIKE N'Login failed for user %';
 
         UPDATE #Failures
-        SET login_name = SUBSTRING(log_text, login_start, reason_at - login_start - 1)
-        WHERE reason_at > login_start + 1;
+        SET login_part = RTRIM(LEFT(log_text,
+            CASE WHEN reason_at > 0 THEN reason_at
+                 WHEN client_at > 0 THEN client_at - 1 ELSE LEN(log_text) END))
+        WHERE log_text LIKE N'Login failed for user ''%';
+
+        -- The last quote before Reason/CLIENT also handles quotes inside login names.
+        UPDATE #Failures
+        SET login_end = LEN(login_part) - CHARINDEX(N'''', REVERSE(login_part)) + 1
+        WHERE RIGHT(login_part, 2) = N'''.';
+
+        UPDATE #Failures
+        SET login_name = SUBSTRING(log_text, login_start, login_end - login_start)
+        WHERE login_end >= login_start;
 
         UPDATE #Failures
         SET client_address = LTRIM(RTRIM(SUBSTRING(log_text, client_at + LEN(N'[CLIENT:'),
@@ -253,17 +323,27 @@ BEGIN
         WHERE analysis_date = @AnalysisDate
         GROUP BY analysis_date, failure_category, error_number, error_state;
 
+        DELETE FROM dbo.LoginFailedSummary WHERE analysis_date < @KeepFromDate;
+        DELETE FROM dbo.LoginFailed WHERE analysis_date < @KeepFromDate;
+
         UPDATE dbo.LoginFailedAnalysisRun
         SET status = 'SUCCEEDED', completed_at_utc = SYSUTCDATETIME(),
             archives_scanned = @ArchivesScanned, failed_login_count = @FailureCount
         WHERE analysis_run_id = @AnalysisRunId;
         COMMIT TRANSACTION;
+        EXEC sys.sp_releaseapplock @Resource = N'DBAnalyzer.LoginFailed',
+            @LockOwner = N'Session', @DbPrincipal = N'public';
+        SET @LockTaken = 0;
     END TRY
     BEGIN CATCH
         IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+        IF @LockTaken = 1
+            EXEC sys.sp_releaseapplock @Resource = N'DBAnalyzer.LoginFailed',
+                @LockOwner = N'Session', @DbPrincipal = N'public';
         IF @AnalysisRunId IS NOT NULL
             UPDATE dbo.LoginFailedAnalysisRun
             SET status = 'FAILED', completed_at_utc = SYSUTCDATETIME(),
+                archives_scanned = @ArchivesScanned,
                 error_number = ERROR_NUMBER(), error_message = ERROR_MESSAGE()
             WHERE analysis_run_id = @AnalysisRunId;
         THROW;

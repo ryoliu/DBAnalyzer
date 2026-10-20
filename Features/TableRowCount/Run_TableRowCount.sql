@@ -22,3 +22,11 @@ FROM dbo.vTableRowCountGrowthSummary
 ORDER BY avg_daily_used_mb_growth DESC,database_name,schema_name,table_name;
 GO
 SELECT TOP(20) * FROM dbo.TableRowCountRun ORDER BY capture_run_id DESC;
+GO
+-- Linear estimates from the latest snapshot, using the last 30 calendar dates.
+SELECT database_name,schema_name,table_name,forecast_status,
+ first_snapshot_date,last_snapshot_date,snapshot_age_days,snapshot_count,observed_days,
+ last_row_count,avg_daily_net_growth,
+ forecast_date_7d,estimated_row_count_7d,forecast_date_30d,estimated_row_count_30d
+FROM dbo.vTableRowCountForecast
+ORDER BY estimated_row_count_30d DESC,database_name,schema_name,table_name;

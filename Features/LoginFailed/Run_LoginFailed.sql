@@ -5,6 +5,9 @@ EXEC dbo.usp_AnalyzeLoginFailed;
 GO
 -- Rebuild one date when necessary, or explicitly collect today's partial log.
 -- EXEC dbo.usp_AnalyzeLoginFailed @AnalysisDate='20261016';
+-- Increase limits only when the retained ERRORLOG files still cover the requested date.
+-- EXEC dbo.usp_AnalyzeLoginFailed @AnalysisDate='20261016', @MaxArchiveNo=20, @RetentionDays=90;
+-- SQL Agent: EXEC dbo.usp_AnalyzeLoginFailed @ReturnResults=0;
 -- DECLARE @Today date=CONVERT(date,GETDATE());
 -- EXEC dbo.usp_AnalyzeLoginFailed @AnalysisDate=@Today;
 
@@ -19,10 +22,10 @@ SELECT log_date,login_name,client_address,error_number,severity,error_state,
 FROM dbo.LoginFailed WHERE analysis_date=@Date
 ORDER BY log_date,login_failed_id;
 
-SELECT login_name,client_address,error_number,error_state,COUNT_BIG(*) AS failure_count,
+SELECT login_name,client_address,failure_category,error_number,error_state,COUNT_BIG(*) AS failure_count,
  MIN(log_date) AS first_failure,MAX(log_date) AS last_failure
-FROM dbo.LoginFailed WHERE analysis_date=@Date
-GROUP BY login_name,client_address,error_number,error_state
+FROM dbo.vLoginFailedClassified WHERE analysis_date=@Date
+GROUP BY login_name,client_address,failure_category,error_number,error_state
 ORDER BY failure_count DESC;
 
 SELECT TOP(20) * FROM dbo.LoginFailedAnalysisRun ORDER BY analysis_run_id DESC;
