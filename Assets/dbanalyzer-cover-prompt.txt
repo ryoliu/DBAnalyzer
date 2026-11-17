@@ -1,0 +1,9 @@
+Generated with the built-in image_gen tool.
+
+Use case: ads-marketing
+Asset type: Wide landscape GitHub repository project cover for DBAnalyzer, approximately 2:1 composition.
+Primary request: Create a polished professional cover for DBAnalyzer, a SQL Server performance monitoring and analysis project for DBAs.
+Scene and style: refined technical editorial illustration on a deep navy background, precise restrained cyan and teal accents with a small amber highlight for a blocked request. Clean, calm, credible engineering aesthetic. A subtly dimensional database cylinder connected to a concise blocking-chain node diagram and small elegant CPU and query duration traces. These are conceptual visual motifs, not a fake screenshot. Fine grid and thin data paths used sparingly. Strong visual hierarchy and generous negative space. No people or mascots.
+Typography: large crisp highly legible exact title "DBAnalyzer"; smaller subtitle "SQL Server Performance Analysis". Supporting small labels, if needed, only "Blocking", "Long Running SQL", "CPU & Logical Reads". All lettering in English. Preserve correct capitalization. Keep typography comfortably inset and readable when scaled down.
+Composition: title and subtitle prominently on the left; coherent database and monitoring illustration on the right; balanced wide cover with ample margins. Premium purposeful design rather than many floating dashboard cards.
+Constraints: no Microsoft logo, no invented metrics or claims, no watermarks, no excessive neon glow, no generic hacker imagery. Opaque background.

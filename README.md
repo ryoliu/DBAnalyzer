@@ -1,5 +1,7 @@
 # DBAnalyzer GUI 部署
 
+![DBAnalyzer project cover](Assets/dbanalyzer-cover.png)
+
 將整個 DBAnalyzer 資料夾複製到部署電腦，保留子資料夾結構。
 
 監控物件集中在 `MS_PERF_COLLECTION`：`dbo` 保留 WhoIsActive 原始採樣與相關函式，`analyzer` 放置分析表、SP 與 View。原始採樣保留 7 天，分析資料保留含當天的 30 個日期。本套件提供全新安裝與目前架構的重複部署；舊版獨立 `DBAnalyzer` 資料庫需另行規劃資料搬移。
