@@ -123,7 +123,7 @@ BEGIN
     IF @RetentionDays IS NULL OR @RetentionDays < 1
         THROW 56005, 'RetentionDays must be greater than zero.', 1;
 
-    DECLARE @KeepFromDate date = DATEADD(DAY, -@RetentionDays, CONVERT(date, GETDATE()));
+    DECLARE @KeepFromDate date = DATEADD(DAY, 1 - @RetentionDays, CONVERT(date, GETDATE()));
     IF @AnalysisDate < @KeepFromDate OR @AnalysisDate < CONVERT(date, '17530101')
         THROW 56006, 'AnalysisDate is outside the supported retention window. Increase RetentionDays if needed.', 1;
 

@@ -16,7 +16,9 @@ $files=@(
     'Features\LongRunning\Deploy_DBAnalyzer_LongRunning.sql',
     'Features\HighResource\Deploy_DBAnalyzer_HighResource.sql',
     'Features\TableRowCount\Deploy_DBAnalyzer_TableRowCount.sql',
+    'Features\Retention\Deploy_DBAnalyzer_Retention.sql',
     'Features\Jobs\Deploy_DBAnalyzer_Jobs.sql',
+    'Features\Jobs\Deploy_DBAnalyzer_CleanupJob.sql',
     'Features\Maintance\_MaintanceJob.sql'
 )
 
@@ -80,7 +82,7 @@ try {
         }
     }
 
-    $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE enabled=1 AND name IN(N'_DBAnalyzer-Daily',N'_DBAnalyzer-Blocking-Cleanup');"
+    $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE enabled=1 AND name IN(N'_DBAnalyzer-Daily',N'_DBAnalyzer-History-Cleanup');"
     if([int]$command.ExecuteScalar() -ne 2){throw 'Expected two enabled jobs: daily analysis and cleanup.'}
     $command.CommandText="SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE (enabled=1 AND name=N'_Maintenance.EveryDay') OR (enabled=0 AND name IN(N'_BackupFull-Split',N'_BackupTransactionLog-Split'));"
     if([int]$command.ExecuteScalar() -ne 3){throw 'Expected an enabled maintenance job and two disabled backup jobs.'}

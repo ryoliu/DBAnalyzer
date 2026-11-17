@@ -110,33 +110,3 @@ BEGIN CATCH
  THROW;
 END CATCH;
 GO
-DECLARE @Owner sysname=SUSER_SNAME(0x01),@JobId uniqueidentifier,@ScheduleId int;
-SELECT @JobId=job_id FROM dbo.sysjobs WHERE name=N'_DBAnalyzer-Blocking-Cleanup';
-IF @JobId IS NULL
-BEGIN
- EXEC dbo.sp_add_job @job_name=N'_DBAnalyzer-Blocking-Cleanup',@enabled=0,
-  @description=N'Delete daily blocking reports older than 30 days; preserve pre-daily historical data.',
-  @owner_login_name=@Owner,@job_id=@JobId OUTPUT;
- EXEC dbo.sp_add_jobserver @job_id=@JobId;
-END;
-IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=1)
- EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Purge blocking history',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-  @command=N'EXEC dbo.usp_PurgeBlockingAnalysis @RetentionDays=30;',
-  @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
-ELSE
- EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=1,@database_name=N'DBAnalyzer',
-  @command=N'EXEC dbo.usp_PurgeBlockingAnalysis @RetentionDays=30;',
-  @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
-SELECT @ScheduleId=schedule_id FROM dbo.sysschedules WHERE name=N'_DBAnalyzer-Blocking-Cleanup-Daily-0310';
-IF @ScheduleId IS NULL
- EXEC dbo.sp_add_schedule @schedule_name=N'_DBAnalyzer-Blocking-Cleanup-Daily-0310',
-  @enabled=1,@freq_type=4,@freq_interval=1,@freq_subday_type=1,@active_start_time=31000,
-  @schedule_id=@ScheduleId OUTPUT;
-ELSE
- EXEC dbo.sp_update_schedule @schedule_id=@ScheduleId,@enabled=1,
-  @freq_type=4,@freq_interval=1,@freq_subday_type=1,@active_start_time=31000;
-IF NOT EXISTS(SELECT 1 FROM dbo.sysjobschedules WHERE job_id=@JobId AND schedule_id=@ScheduleId)
- EXEC dbo.sp_attach_schedule @job_id=@JobId,@schedule_id=@ScheduleId;
-EXEC dbo.sp_update_job @job_id=@JobId,@enabled=1,@start_step_id=1;
-GO

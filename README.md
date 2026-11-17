@@ -44,6 +44,7 @@ DBAnalyzer/
     LongRunning/
     HighResource/
     TableRowCount/
+    Retention/
     Jobs/
     Maintance/
   Deploy_GUI.cmd
@@ -66,8 +67,10 @@ DBAnalyzer/
 7. Features/LongRunning/Deploy_DBAnalyzer_LongRunning.sql
 8. Features/HighResource/Deploy_DBAnalyzer_HighResource.sql
 9. Features/TableRowCount/Deploy_DBAnalyzer_TableRowCount.sql
-10. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
-11. Features/Maintance/_MaintanceJob.sql
+10. Features/Retention/Deploy_DBAnalyzer_Retention.sql
+11. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
+12. Features/Jobs/Deploy_DBAnalyzer_CleanupJob.sql
+13. Features/Maintance/_MaintanceJob.sql
 
 SQL 發生錯誤會停止並顯示檔名與批次。已完成的 SQL 不會整套回滾，修正後可重新部署。部署時請避開排程執行時間。
 
@@ -91,7 +94,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 |WhoIsActive 收集（首次安裝預設）|每分鐘，保留 7 天|
 |`_DBAnalyzer-Daily`：依序分析前一天 Blocking、登入失敗、長時間 SQL、高資源 SQL|每日 02:00|
 |同一 Job 第 5 步：擷取當天資料表估計筆數|前四步成功後執行|
-|Blocking 清除 30 天前日報|每日 03:10|
+|`_DBAnalyzer-History-Cleanup`：12 張歷史表保留含當天的 30 個日期|每日 03:10|
 |`_Maintenance.EveryDay`：MSDB 歷史清理及擁有者維護|每日 10:30，部署後啟用|
 |`_BackupFull-Split`：完整備份|每日 01:00，部署後停用|
 |`_BackupTransactionLog-Split`：交易記錄備份|每 15 分鐘，部署後停用|
@@ -102,7 +105,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 
 每日分析 Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；DBAnalyzer 中的分析資料與執行紀錄保留。
 
-登入失敗收集預設最多讀取 ERRORLOG 0～10，來源須涵蓋分析日期起點，讀取期間偵測到輪替則失敗並保留舊資料。成功收集時清除 30 天前的明細與彙總，執行紀錄保留；可使用 `@MaxArchiveNo` 與 `@RetentionDays` 調整。此次修改已在 WIN2019LAB 的獨立 tempdb 測試物件完成真實 ERRORLOG 與模擬異常驗證，並於 2026-10-20 部署至既有 DBAnalyzer，部署前後歷史筆數不變，詳見 `Features/LoginFailed/LoginFailed_Operations.md`。
+登入失敗收集預設最多讀取 ERRORLOG 0～10，來源須涵蓋分析日期起點，讀取期間偵測到輪替則失敗並保留舊資料。成功收集時清除保留期間之外的明細與彙總；統一清理 Job 另清除過期執行紀錄。預設保留包含當天的 30 個日期；可使用 `@MaxArchiveNo` 與 `@RetentionDays` 調整。此次修改已在 WIN2019LAB 的獨立 tempdb 測試物件完成真實 ERRORLOG 與模擬異常驗證，並於 2026-10-20 部署至既有 DBAnalyzer，部署前後歷史筆數不變，詳見 `Features/LoginFailed/LoginFailed_Operations.md`。
 
 長時間 SQL 預設門檻為 300 秒，將同一 Request 的採樣合併成一筆，排除閒置連線與系統背景工作。說明及手動執行範例見 `Features/LongRunning` 資料夾。
 
@@ -128,4 +131,4 @@ WIN2019LAB 另建有 `TableRowCountTestLab.dbo.SampleRows`：SQL Server Agent �
 C:\DBAnalyzer\Deploy.ps1 -ServerInstance 'WIN2019LAB' -TrustServerCertificate
 ```
 
-已驗證 GUI 的空白輸入檢查、Instance／憑證參數傳遞、背景執行、執行中關閉保護、成功與失敗狀態。每日分析已合併為一個 Job，歷史清除維持獨立 Job。
+已驗證 GUI 的空白輸入檢查、Instance／憑證參數傳遞、背景執行、執行中關閉保護、成功與失敗狀態。每日分析已合併為一個 Job，歷史清除維持獨立 Job。統一清理說明見 `Features/Retention/Retention_Operations.md`。
