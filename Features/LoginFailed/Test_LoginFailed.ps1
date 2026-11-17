@@ -77,7 +77,7 @@ INSERT $schema.SourceLog VALUES
 
         function Expect-Failure([int]$Number, [string]$Arguments = '') {
             try {
-                Invoke-TestSql "EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0 $Arguments;"
+                Invoke-TestSql "DECLARE @Day date=DATEADD(DAY,-1,CONVERT(date,GETDATE())); EXEC $schema.usp_AnalyzeLoginFailed @AnalysisDate=@Day,@ReturnResults=0 $Arguments;"
                 throw "Expected SQL error $Number was not raised."
             } catch {
                 if ($_.Exception.GetBaseException().Number -ne $Number) { throw }
@@ -219,7 +219,7 @@ INSERT $schema.SourceLog VALUES
  (0,DATEADD(MINUTE,3,@Day),N'Logon',N'Login failed for user ''''. [CLIENT: <local machine>]'),
  (0,DATEADD(MINUTE,4,@Day),N'Logon',N'Login failed for user ''Malformed. [CLIENT: 10.0.0.4]'),
  (0,DATEADD(DAY,1,@Day),N'Logon',N'Login failed for user ''NextDay''.');
-EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0;
+EXEC $schema.usp_AnalyzeLoginFailed @AnalysisDate=@Day,@ReturnResults=0;
 IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE analysis_date=CONVERT(date,@Day))<>6
     THROW 57103,'Wrong detail count or date boundary.',1;
 IF NOT EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE login_name=N'NoReason' AND failure_reason IS NULL AND client_address=N'10.0.0.1')
@@ -237,7 +237,7 @@ IF EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date<DATEADD(DAY,-29,
     OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date=DATEADD(DAY,-29,CONVERT(date,GETDATE())))
     OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailedAnalysisRun WHERE source_server=N'Test')
     THROW 57108,'Retention boundary or run-history preservation failed.',1;
-EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0;
+EXEC $schema.usp_AnalyzeLoginFailed @AnalysisDate=@Day,@ReturnResults=0;
 IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE analysis_date=CONVERT(date,@Day))<>6
     OR (SELECT SUM(failure_count) FROM $schema.LoginFailedSummary WHERE analysis_date=CONVERT(date,@Day))<>6
     THROW 57109,'Repeat collection accumulated details or summaries.',1;
@@ -245,7 +245,7 @@ IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE analysis_date=CONVERT(date,@D
             Write-Host 'PASS: parsing, unique headers, duplicate preservation, date boundary, retention and repeat'
 
             Reset-Fixture
-            Invoke-TestSql "EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0; IF EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date=DATEADD(DAY,-1,CONVERT(date,GETDATE()))) OR EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date=DATEADD(DAY,-1,CONVERT(date,GETDATE()))) THROW 57110,'Complete zero-event collection did not replace old data.',1;"
+            Invoke-TestSql "DECLARE @Day date=DATEADD(DAY,-1,CONVERT(date,GETDATE())); EXEC $schema.usp_AnalyzeLoginFailed @AnalysisDate=@Day,@ReturnResults=0; IF EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date=DATEADD(DAY,-1,CONVERT(date,GETDATE()))) OR EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date=DATEADD(DAY,-1,CONVERT(date,GETDATE()))) THROW 57110,'Complete zero-event collection did not replace old data.',1;"
             Write-Host 'PASS: complete source with zero failures'
 
             Reset-Fixture 'INCOMPLETE'
@@ -272,7 +272,7 @@ UPDATE $schema.SourceLog SET archive_number=1;
 INSERT $schema.SourceLog VALUES
  (0,@Day,N'Logon',N'Login failed for user ''MidnightA''.'),
  (1,@Day,N'Logon',N'Login failed for user ''MidnightB''.');
-EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0;
+EXEC $schema.usp_AnalyzeLoginFailed @AnalysisDate=@Day,@ReturnResults=0;
 IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE analysis_date=CONVERT(date,@Day))<>2
     THROW 57111,'Midnight ties in adjacent archives were lost.',1;
 "@

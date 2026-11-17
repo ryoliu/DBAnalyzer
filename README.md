@@ -2,7 +2,7 @@
 
 將整個 DBAnalyzer 資料夾複製到部署電腦，保留子資料夾結構。
 
-監控物件集中在 `MS_PERF_COLLECTION`：`dbo` 保留 WhoIsActive 原始採樣與相關函式，`analyzer` 放置分析表、SP 與 View。原始採樣保留 7 天，分析資料保留含當天的 30 個日期。既有 `DBAnalyzer` 的遷移方式見 `Features/Migration/Migration_Operations.md`。
+監控物件集中在 `MS_PERF_COLLECTION`：`dbo` 保留 WhoIsActive 原始採樣與相關函式，`analyzer` 放置分析表、SP 與 View。原始採樣保留 7 天，分析資料保留含當天的 30 個日期。本套件提供全新安裝與目前架構的重複部署；舊版獨立 `DBAnalyzer` 資料庫需另行規劃資料搬移。
 
 ## 使用方式
 
@@ -47,7 +47,6 @@ DBAnalyzer/
     HighResource/
     TableRowCount/
     Retention/
-    Migration/
     Jobs/
     Maintance/
   Deploy_GUI.cmd
@@ -96,8 +95,8 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 |功能|目標伺服器當地時間|
 |---|---|
 |WhoIsActive 收集（首次安裝預設）|每分鐘，保留 7 天|
-|`_DBAnalyzer-Daily`：依序分析前一天 Blocking、登入失敗、長時間 SQL、高資源 SQL|每日 02:00|
-|同一 Job 第 5 步：擷取當天資料表估計筆數|前四步成功後執行|
+|`_DBAnalyzer-Daily`：依序分析當天截至執行開始時的 Blocking、登入失敗、長時間 SQL、高資源 SQL|每日 00:00～23:59:59，每 10 分鐘|
+|同一 Job 第 5 步：更新當天資料表估計筆數與容量快照|前四步成功後執行|
 |`_DBAnalyzer-History-Cleanup`：12 張歷史表保留含當天的 30 個日期|每日 03:10|
 |`_Maintenance.EveryDay`：MSDB 歷史清理及擁有者維護|每日 10:30，部署後啟用|
 |`_BackupFull-Split`：完整備份|每日 01:00，部署後停用|
@@ -107,7 +106,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 
 兩個備份 Job 最後會被腳本停用，部署不立即執行備份或每日維護內容。備份預設使用 QNAP 模式、位址 `127.0.0.1`、共用名稱 `sqlbk`、檔案保留 7 天；啟用前請依環境調整腳本中的設定。Deploy.ps1 完成時會檢查每日維護 Job 已啟用，且兩個備份 Job 已停用。
 
-每日分析 Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；`MS_PERF_COLLECTION.analyzer` 中的分析資料與執行紀錄保留。
+分析 Job 每日 00:00～23:59:59 每 10 分鐘執行一次，分析當天 00:00 至各步驟執行開始時，起點包含、截止時間不包含；第 5 步取代當天快照，不保留每 10 分鐘的歷史快照。Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；`MS_PERF_COLLECTION.analyzer` 中的分析資料與執行紀錄保留。
 
 登入失敗收集預設最多讀取 ERRORLOG 0～10，來源須涵蓋分析日期起點，讀取期間偵測到輪替則失敗並保留舊資料。成功收集時清除保留期間之外的明細與彙總；統一清理 Job 另清除過期執行紀錄。預設保留包含當天的 30 個日期；可使用 `@MaxArchiveNo` 與 `@RetentionDays` 調整。此次修改已在 WIN2019LAB 的獨立 tempdb 測試物件完成真實 ERRORLOG 與模擬異常驗證，並於 2026-10-20 部署至既有 DBAnalyzer，部署前後歷史筆數不變，詳見 `Features/LoginFailed/LoginFailed_Operations.md`。
 
@@ -136,3 +135,5 @@ C:\DBAnalyzer\Deploy.ps1 -ServerInstance 'WIN2019LAB' -TrustServerCertificate
 ```
 
 已驗證 GUI 的空白輸入檢查、Instance／憑證參數傳遞、背景執行、執行中關閉保護、成功與失敗狀態。每日分析已合併為一個 Job，歷史清除維持獨立 Job。統一清理說明見 `Features/Retention/Retention_Operations.md`。
+
+午夜後排程轉看新的一天，上一日結果停留在最後一次更新時間，不自動補齊午夜前尾段。需完整歷史日報時，請在原始採樣清除前指定 `@AnalysisDate` 手動補跑。

@@ -1,12 +1,12 @@
 USE MS_PERF_COLLECTION;
 GO
--- Default: analyze the previous server-local calendar date.
+-- Default: analyze the current server-local day up to execution start.
 EXEC analyzer.usp_AnalyzeWhoIsActiveBlocking;
 GO
 -- Rebuild one date when needed. The current date produces a partial report.
 -- EXEC analyzer.usp_AnalyzeWhoIsActiveBlocking @AnalysisDate='20261016';
 
-DECLARE @AnalysisDate date=DATEADD(DAY,-1,CONVERT(date,GETDATE()));
+DECLARE @AnalysisDate date=CONVERT(date,GETDATE());
 SELECT * FROM analyzer.vBlockingIncident
 WHERE analysis_date=@AnalysisDate ORDER BY start_time,incident_id;
 SELECT * FROM analyzer.vBlockingDetail

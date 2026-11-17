@@ -56,11 +56,13 @@ BEGIN
  SET XACT_ABORT ON;
  SET @AnalysisRunId=NULL;
  IF @@TRANCOUNT<>0 THROW 58300,'Execute outside an existing transaction.',1;
- SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,DATEADD(DAY,-1,GETDATE())));
- IF @AnalysisDate>CONVERT(date,GETDATE()) THROW 58301,'AnalysisDate must not be in the future.',1;
+ DECLARE @RunTime datetime = GETDATE();
+ SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,@RunTime));
+ IF @AnalysisDate>CONVERT(date,@RunTime) THROW 58301,'AnalysisDate must not be in the future.',1;
  IF @TopN IS NULL OR @TopN<1 THROW 58302,'TopN must be positive.',1;
  DECLARE @FromTime datetime=CONVERT(datetime,@AnalysisDate),
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate));
+ IF @ToTime>@RunTime SET @ToTime=@RunTime;
  BEGIN TRY
   INSERT analyzer.HighResourceSqlAnalysisRun(analysis_date,top_n,started_at_utc,
    source_server,source_time_at_start,status)

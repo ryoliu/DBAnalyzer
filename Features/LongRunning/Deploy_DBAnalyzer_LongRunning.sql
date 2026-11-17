@@ -53,12 +53,14 @@ BEGIN
  SET XACT_ABORT ON;
  SET @AnalysisRunId=NULL;
  IF @@TRANCOUNT<>0 THROW 58000,'Execute outside an existing transaction.',1;
- SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,DATEADD(DAY,-1,GETDATE())));
- IF @AnalysisDate>CONVERT(date,GETDATE()) THROW 58001,'AnalysisDate must not be in the future.',1;
+ DECLARE @RunTime datetime = GETDATE();
+ SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,@RunTime));
+ IF @AnalysisDate>CONVERT(date,@RunTime) THROW 58001,'AnalysisDate must not be in the future.',1;
  IF @MinDurationSeconds IS NULL OR @MinDurationSeconds<1
   THROW 58002,'MinDurationSeconds must be positive.',1;
  DECLARE @FromTime datetime=CONVERT(datetime,@AnalysisDate),
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate));
+ IF @ToTime>@RunTime SET @ToTime=@RunTime;
  BEGIN TRY
   INSERT analyzer.LongRunningSqlAnalysisRun(analysis_date,min_duration_seconds,
    started_at_utc,source_server,source_time_at_start,status)

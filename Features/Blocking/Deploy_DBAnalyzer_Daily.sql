@@ -85,11 +85,13 @@ BEGIN
  SET XACT_ABORT ON;
  SET @AnalysisRunId=NULL;
  IF @@TRANCOUNT<>0 THROW 54000,'Execute outside an existing transaction.',1;
- SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,DATEADD(DAY,-1,GETDATE())));
- IF @AnalysisDate>CONVERT(date,GETDATE()) THROW 54001,'AnalysisDate must not be in the future.',1;
+ DECLARE @RunTime datetime = GETDATE();
+ SET @AnalysisDate=COALESCE(@AnalysisDate,CONVERT(date,@RunTime));
+ IF @AnalysisDate>CONVERT(date,@RunTime) THROW 54001,'AnalysisDate must not be in the future.',1;
  DECLARE @FromTime datetime=CONVERT(datetime,@AnalysisDate),
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate)),
          @MaxSampleGapSeconds int=90;
+ IF @ToTime>@RunTime SET @ToTime=@RunTime;
  BEGIN TRY
   INSERT analyzer.BlockingAnalysisRun(started_at_utc,source_server,source_time_at_start,
       requested_from_time,requested_to_time,max_sample_gap_seconds,status,run_mode,analysis_date)

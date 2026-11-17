@@ -23,4 +23,6 @@
 
 - Active monitoring objects use the single database `MS_PERF_COLLECTION`: raw WhoIsActive objects stay in `dbo`; all analysis tables, procedures, and views use `analyzer`. Do not recreate a separate DBAnalyzer database. Preserve raw-sample retention at 7 days and analysis retention at 30 calendar dates including today.
 
-- The original `DBAnalyzer` database was retained READ_ONLY after the 2026-11-17 consolidation for recovery only. All active jobs use `MS_PERF_COLLECTION.analyzer`; do not write to or reactivate the old database without a recovery request. The old collection `dbo.LoginFailed` table and procedure were removed; use `analyzer.LoginFailed` and `analyzer.usp_AnalyzeLoginFailed`.
+- The latest fresh LAB deployment on 2026-11-17 started with only the four system databases. `MS_PERF_COLLECTION` is now the only monitoring database; no separate `DBAnalyzer` or optional `TableRowCountTestLab` database exists. Earlier recovery-copy records describe the previous installation. Use `analyzer.LoginFailed` and `analyzer.usp_AnalyzeLoginFailed`; do not create legacy dbo LoginFailed objects.
+
+- Analysis defaults to the current server-local day from midnight up to a timestamp captured once at procedure entry. Explicit past dates still analyze a complete day. The daily analysis job runs every 10 minutes from 00:00 through 23:59:59; it does not automatically finalize the previous day.

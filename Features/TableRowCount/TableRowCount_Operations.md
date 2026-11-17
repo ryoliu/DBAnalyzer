@@ -9,13 +9,13 @@
 |`analyzer.vTableRowCountGrowth`|與前一份有效快照比較的筆數與容量淨增減|
 |`analyzer.vTableRowCountGrowthSummary`|第一份至最後一份有效快照的筆數及容量平均每日增長|
 |`analyzer.vTableRowCountForecast`|最近 30 個日曆日期的筆數趨勢，估算最新快照之後 7 天及 30 天的筆數|
-|`_DBAnalyzer-Daily` 第 5 步|每日 VM 當地時間 02:00 啟動，前四步成功後擷取當下筆數|
+|`_DBAnalyzer-Daily` 第 5 步|每日 VM 當地時間 00:00～23:59:59 每 10 分鐘執行，前四步成功後更新當天快照|
 
 ## 執行與日期
 
 `Run_TableRowCount.sql` 包含手動擷取及查詢範例。SP 參數只有 `@ReturnResults`（預設 1）及 `@CaptureRunId OUTPUT`。Job 使用 `@ReturnResults=0` 只寫表。
 
-這是執行當下的快照，以 VM 當地日期記錄；前四個分析步驟處理的是前一天，兩者日期意義不同。本 SP 不提供歷史日期參數，無法事後還原昨天的筆數。同日重跑會取代當天快照，執行紀錄則持續保留。
+這是執行當下的快照，以 VM 當地日期記錄；前四個分析步驟處理當天截至各步驟執行開始時的累積資料，快照則記錄擷取當下的狀態。本 SP 不提供歷史日期參數，無法事後還原昨天的筆數。同日重跑會取代當天快照，執行紀錄則持續保留。
 
 ## 取得筆數與 UsedMB
 

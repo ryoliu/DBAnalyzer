@@ -114,26 +114,27 @@ BEGIN
 
     IF @@TRANCOUNT <> 0
         THROW 56000, 'Execute outside an existing transaction.', 1;
+    DECLARE @RunTime datetime = GETDATE();
     IF @AnalysisDate IS NULL
-        SET @AnalysisDate = DATEADD(DAY, -1, CONVERT(date, GETDATE()));
-    IF @AnalysisDate > CONVERT(date, GETDATE())
+        SET @AnalysisDate = CONVERT(date, @RunTime);
+    IF @AnalysisDate > CONVERT(date, @RunTime)
         THROW 56001, 'AnalysisDate must not be in the future.', 1;
     IF @MaxArchiveNo IS NULL OR @MaxArchiveNo < 0
         THROW 56004, 'MaxArchiveNo must be zero or greater.', 1;
     IF @RetentionDays IS NULL OR @RetentionDays < 1
         THROW 56005, 'RetentionDays must be greater than zero.', 1;
 
-    DECLARE @KeepFromDate date = DATEADD(DAY, 1 - @RetentionDays, CONVERT(date, GETDATE()));
+    DECLARE @KeepFromDate date = DATEADD(DAY, 1 - @RetentionDays, CONVERT(date, @RunTime));
     IF @AnalysisDate < @KeepFromDate OR @AnalysisDate < CONVERT(date, '17530101')
         THROW 56006, 'AnalysisDate is outside the supported retention window. Increase RetentionDays if needed.', 1;
 
     DECLARE @FromTime datetime = CONVERT(datetime, @AnalysisDate);
     DECLARE @ToTime datetime = DATEADD(DAY, 1, @FromTime);
-    DECLARE @ReadUntil datetime = GETDATE(), @OldestTime datetime, @CurrentFirstTime datetime;
+    IF @ToTime > @RunTime SET @ToTime = @RunTime;
+    DECLARE @ReadUntil datetime = @ToTime, @OldestTime datetime, @CurrentFirstTime datetime;
     DECLARE @LogNumber int, @LastLogNumber int, @ArchivesScanned int = 0;
     DECLARE @FailureCount bigint, @AuditLevel nvarchar(128), @AuditValue int;
     DECLARE @LockResult int, @LockTaken bit = 0;
-    IF @ReadUntil > @ToTime SET @ReadUntil = @ToTime;
 
     BEGIN TRY
         -- 1. Record the run and check login auditing.

@@ -1,6 +1,6 @@
 USE MS_PERF_COLLECTION;
 GO
--- Collect the previous server-local calendar date.
+-- Collect the current server-local day up to execution start.
 EXEC analyzer.usp_AnalyzeLoginFailed;
 GO
 -- Rebuild one date when necessary, or explicitly collect today's partial log.
@@ -11,7 +11,7 @@ GO
 -- DECLARE @Today date=CONVERT(date,GETDATE());
 -- EXEC analyzer.usp_AnalyzeLoginFailed @AnalysisDate=@Today;
 
-DECLARE @Date date=DATEADD(DAY,-1,CONVERT(date,GETDATE()));
+DECLARE @Date date=CONVERT(date,GETDATE());
 SELECT analysis_date,failure_category,error_number,error_state,failure_count,
  affected_login_count,affected_client_count,first_failure,last_failure,sample_failure_reason
 FROM analyzer.LoginFailedSummary WHERE analysis_date=@Date

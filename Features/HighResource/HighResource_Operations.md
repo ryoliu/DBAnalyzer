@@ -1,12 +1,12 @@
 # 高資源 SQL 每日回顧
 
-`analyzer.usp_AnalyzeWhoIsActiveHighResource` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設分析 VM 當地時間前一天，分別產生 CPU 與邏輯讀取量前 20 名 Request。
+`analyzer.usp_AnalyzeWhoIsActiveHighResource` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設分析 VM 當地時間當天 00:00 至本次執行開始時，分別產生 CPU 與邏輯讀取量前 20 名 Request。
 
 |物件|用途|
 |---|---|
 |`analyzer.HighResourceSql`|兩份排行榜的聯集；同一 Request 同時入榜只存一筆|
 |`analyzer.HighResourceSqlAnalysisRun`|日期、Top N、來源筆數、無效計數器筆數、結果筆數與執行狀態|
-|`_DBAnalyzer-Daily` 第 4 步|前面三個分析步驟成功後，分析前一天|
+|`_DBAnalyzer-Daily` 第 4 步|前面三個分析步驟成功後，分析當天截至執行開始時|
 
 ## 執行
 
@@ -14,7 +14,7 @@
 
 |參數|預設值|用途|
 |---|---|---|
-|`@AnalysisDate`|前一天|也可指定今天，分析已有採樣|
+|`@AnalysisDate`|今天|指定過去日期時分析完整日；今天截止於執行開始時|
 |`@TopN`|20|每份排行榜最多保留的 Request 數；必須為正整數|
 |`@ReturnResults`|1|回傳執行紀錄、CPU 排行榜、邏輯讀取排行榜；0 只寫表|
 |`@AnalysisRunId OUTPUT`|NULL|回傳本次分析編號|
@@ -50,3 +50,5 @@ CPU 單位與邏輯讀取定義參考 [Microsoft sys.dm_exec_requests 文件](ht
 - `Deploy_DBAnalyzer_HighResource.sql`：兩張表與分析 SP。
 - `Run_HighResource.sql`：手動分析與查詢。
 - `../Jobs/Deploy_DBAnalyzer_Jobs.sql`：共用每日排程。
+
+當天的截止時間在每次 SP 開始時固定，使用起點包含、截止不包含的區間。指定過去日期仍分析完整日。午夜後預設日期轉為新的一天，前一日尾段不會自動補跑。

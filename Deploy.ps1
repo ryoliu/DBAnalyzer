@@ -31,6 +31,7 @@ $settings['Integrated Security']=$true
 $settings['Encrypt']=$true
 $settings['TrustServerCertificate']=[bool]$TrustServerCertificate
 $settings['Connect Timeout']=15
+$settings['Pooling']=$false
 $connection=[System.Data.SqlClient.SqlConnection]::new($settings.ConnectionString)
 $command=$null
 

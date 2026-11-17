@@ -1,11 +1,11 @@
 USE MS_PERF_COLLECTION;
 GO
--- Analyze the previous server-local day.
+-- Analyze the current server-local day up to execution start.
 EXEC analyzer.usp_AnalyzeWhoIsActiveHighResource;
 GO
--- Analyze today's available samples.
-DECLARE @Today date=CONVERT(date,GETDATE());
-EXEC analyzer.usp_AnalyzeWhoIsActiveHighResource @AnalysisDate=@Today,@TopN=20;
+-- Rebuild a past day explicitly when needed.
+-- DECLARE @Past date=DATEADD(DAY,-1,CONVERT(date,GETDATE()));
+-- EXEC analyzer.usp_AnalyzeWhoIsActiveHighResource @AnalysisDate=@Past;
 GO
 -- Review CPU and logical-read rankings separately.
 SELECT * FROM analyzer.HighResourceSql WHERE cpu_rank<=20

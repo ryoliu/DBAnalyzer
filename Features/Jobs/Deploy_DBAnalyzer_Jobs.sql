@@ -24,13 +24,13 @@ BEGIN TRY
  IF @JobId IS NULL
  BEGIN
   EXEC dbo.sp_add_job @job_name=N'_DBAnalyzer-Daily',@enabled=0,
-   @description=N'Daily SQL analysis and current table row-count snapshots.',
+   @description=N'Refresh current-day analysis and current snapshots every 10 minutes from 00:00.',
    @owner_login_name=@Owner,@job_id=@JobId OUTPUT;
   EXEC dbo.sp_add_jobserver @job_id=@JobId;
  END
  ELSE
   EXEC dbo.sp_update_job @job_id=@JobId,@enabled=0,@new_name=N'_DBAnalyzer-Daily',
-   @description=N'Daily SQL analysis and current table row-count snapshots.';
+   @description=N'Refresh current-day analysis and current snapshots every 10 minutes from 00:00.';
 
  IF EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id>5)
   THROW 54203,'Unexpected job steps exist; resolve before deploying.',1;
@@ -88,14 +88,20 @@ BEGIN TRY
  IF @OldScheduleId IS NOT NULL
   EXEC dbo.sp_detach_schedule @job_id=@JobId,@schedule_id=@OldScheduleId,@delete_unused_schedule=1;
 
- SELECT @ScheduleId=schedule_id FROM dbo.sysschedules WHERE name=N'_DBAnalyzer-Daily-0200';
+ IF (SELECT COUNT(*) FROM dbo.sysschedules WHERE name IN(N'_DBAnalyzer-Daily-0000',N'_DBAnalyzer-Daily-0200'))>1
+  THROW 54205,'Multiple analysis schedules exist; resolve before deploying.',1;
+ SELECT @ScheduleId=schedule_id FROM dbo.sysschedules WHERE name IN(N'_DBAnalyzer-Daily-0000',N'_DBAnalyzer-Daily-0200');
+ IF EXISTS(SELECT 1 FROM dbo.sysjobschedules WHERE schedule_id=@ScheduleId AND job_id<>@JobId)
+  THROW 54204,'The analysis schedule is shared with another job.',1;
  IF @ScheduleId IS NULL
-  EXEC dbo.sp_add_schedule @schedule_name=N'_DBAnalyzer-Daily-0200',
-   @enabled=1,@freq_type=4,@freq_interval=1,@freq_subday_type=1,@active_start_time=20000,
+  EXEC dbo.sp_add_schedule @schedule_name=N'_DBAnalyzer-Daily-0000',
+   @enabled=1,@freq_type=4,@freq_interval=1,@freq_subday_type=4,@freq_subday_interval=10,@active_start_time=0,
+   @active_end_time=235959,@active_end_date=99991231,
    @schedule_id=@ScheduleId OUTPUT;
  ELSE
-  EXEC dbo.sp_update_schedule @schedule_id=@ScheduleId,@enabled=1,
-   @freq_type=4,@freq_interval=1,@freq_subday_type=1,@active_start_time=20000;
+  EXEC dbo.sp_update_schedule @schedule_id=@ScheduleId,@new_name=N'_DBAnalyzer-Daily-0000',@enabled=1,
+   @freq_type=4,@freq_interval=1,@freq_subday_type=4,@freq_subday_interval=10,@active_start_time=0,
+   @active_end_time=235959,@active_end_date=99991231;
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobschedules WHERE job_id=@JobId AND schedule_id=@ScheduleId)
   EXEC dbo.sp_attach_schedule @job_id=@JobId,@schedule_id=@ScheduleId;
 

@@ -1,11 +1,11 @@
 USE MS_PERF_COLLECTION;
 GO
--- Analyze the previous server-local day with the default 300-second threshold.
+-- Analyze the current server-local day up to execution start with the default 300-second threshold.
 EXEC analyzer.usp_AnalyzeWhoIsActiveLongRunning;
 GO
--- Analyze today's available samples.
-DECLARE @Today date=CONVERT(date,GETDATE());
-EXEC analyzer.usp_AnalyzeWhoIsActiveLongRunning @AnalysisDate=@Today;
+-- Rebuild a past day explicitly when needed.
+-- DECLARE @Past date=DATEADD(DAY,-1,CONVERT(date,GETDATE()));
+-- EXEC analyzer.usp_AnalyzeWhoIsActiveLongRunning @AnalysisDate=@Past;
 GO
 -- Review recent reports and run history.
 SELECT * FROM analyzer.LongRunningSql

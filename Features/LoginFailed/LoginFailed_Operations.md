@@ -4,7 +4,7 @@
 
 |物件|用途|
 |---|---|
-|`analyzer.usp_AnalyzeLoginFailed`|收集指定日期，預設前一天|
+|`analyzer.usp_AnalyzeLoginFailed`|收集指定日期，預設當天 00:00 至執行開始時|
 |`analyzer.LoginFailed`|時間、帳號、來源、原因、Error、State 與原文|
 |`analyzer.LoginFailedSummary`|依日期、分類、Error、State 彙總|
 |`analyzer.vLoginFailedClassified`|明細加上原因文字與 Error State 分類|
@@ -15,7 +15,7 @@
 ```sql
 EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed;
 
--- SQL Agent: collect the previous day without result sets.
+-- SQL Agent: collect the current day up to execution start without result sets.
 EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed @ReturnResults=0;
 
 -- Increase limits for a historical date only if its source logs still exist.
@@ -33,7 +33,7 @@ EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed
 
 原本前三個參數的位置不變。超過保留範圍的分析日期會被拒絕，避免剛補收就遭清除；需要補收較早日期時，同時提高保留天數。減少保留天數會在下一次成功收集時清除較舊資料。執行紀錄持續保留。
 
-共用 Job `_DBAnalyzer-Daily` 每天當地 02:00 的第二步使用 `@ReturnResults=0`，現有 Job 不需變更。失敗最多重試 3 次，間隔 1 分鐘。
+共用 Job `_DBAnalyzer-Daily` 每日當地時間 00:00～23:59:59 每 10 分鐘執行，第二步使用 `@ReturnResults=0`，現有 Job 不需變更。失敗最多重試 3 次，間隔 1 分鐘。
 
 ## 收集與資料保護
 
@@ -92,3 +92,5 @@ EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed
 ```powershell
 pwsh -NoProfile -File C:\DBAnalyzer\Features\LoginFailed\Test_LoginFailed.ps1
 ```
+
+當天的截止時間在每次 SP 開始時固定，使用起點包含、截止不包含的區間。指定過去日期仍分析完整日。午夜後預設日期轉為新的一天，前一日尾段不會自動補跑。

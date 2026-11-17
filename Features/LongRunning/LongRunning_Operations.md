@@ -1,12 +1,12 @@
 # 長時間 SQL 每日回顧
 
-`analyzer.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間前一天、已執行至少 300 秒的 Request。
+`analyzer.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間當天 00:00 至本次執行開始時、已執行至少 300 秒的 Request。
 
 |物件|用途|
 |---|---|
 |`analyzer.LongRunningSql`|每個日期、每個 Request 一筆結果|
 |`analyzer.LongRunningSqlAnalysisRun`|執行日期、門檻、來源筆數、結果筆數、狀態與錯誤|
-|`_DBAnalyzer-Daily` 第 3 步|每天 VM 當地時間 02:00 啟動的共用 Job，前兩步成功後執行|
+|`_DBAnalyzer-Daily` 第 3 步|每日 VM 當地時間 00:00～23:59:59 每 10 分鐘執行的共用 Job，前兩步成功後執行|
 
 ## 使用
 
@@ -14,7 +14,7 @@
 
 |參數|預設值|用途|
 |---|---|---|
-|`@AnalysisDate`|前一天|也可指定今天，分析當下已有的採樣|
+|`@AnalysisDate`|今天|指定過去日期時分析完整日；今天截止於執行開始時|
 |`@MinDurationSeconds`|300|最低執行時間，單位秒；必須為正整數|
 |`@ReturnResults`|1|設為 0 只寫入資料表|
 |`@AnalysisRunId OUTPUT`|NULL|回傳本次執行編號|
@@ -43,3 +43,5 @@ SP 依序建立採樣 `#Capture`、Request 彙總 `#Requests`、採樣排序 `#L
 ## 驗證
 
 已在 WIN2019LAB 部署，並以一個不修改資料的等待查詢驗證：未達 300 秒時不列入；超過門檻後 6 次採樣合併成 1 筆，最長觀察時間 345.393 秒。同日重跑仍只有 1 筆。測試查詢已自然結束，未留下測試帳號或測試腳本。完整佈署流程及 SQL Server Agent 三個分析步驟均執行成功。
+
+當天的截止時間在每次 SP 開始時固定，使用起點包含、截止不包含的區間。指定過去日期仍分析完整日。午夜後預設日期轉為新的一天，前一日尾段不會自動補跑。
