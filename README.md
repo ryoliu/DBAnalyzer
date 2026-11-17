@@ -110,7 +110,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 
 登入失敗收集預設最多讀取 ERRORLOG 0～10，來源須涵蓋分析日期起點，讀取期間偵測到輪替則失敗並保留舊資料。成功收集時清除保留期間之外的明細與彙總；統一清理 Job 另清除過期執行紀錄。預設保留包含當天的 30 個日期；可使用 `@MaxArchiveNo` 與 `@RetentionDays` 調整。此次修改已在 WIN2019LAB 的獨立 tempdb 測試物件完成真實 ERRORLOG 與模擬異常驗證，並於 2026-10-20 部署至既有 DBAnalyzer，部署前後歷史筆數不變，詳見 `Features/LoginFailed/LoginFailed_Operations.md`。
 
-長時間 SQL 預設門檻為 300 秒，將同一 Request 的採樣合併成一筆，排除閒置連線與系統背景工作。說明及手動執行範例見 `Features/LongRunning` 資料夾。
+長時間 SQL 預設門檻為 30 秒，將同一 Request 的採樣合併成一筆，排除閒置連線與系統背景工作。說明及手動執行範例見 `Features/LongRunning` 資料夾。
 
 高資源 SQL 分別保留 CPU 及邏輯讀取量前 20 名，以同一 Request 的累計採樣最大值排名，不重複加總。說明及查詢範例見 `Features/HighResource` 資料夾。
 

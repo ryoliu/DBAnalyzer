@@ -1,6 +1,6 @@
 USE MS_PERF_COLLECTION;
 GO
--- Analyze the current server-local day up to execution start with the default 300-second threshold.
+-- Analyze the current server-local day up to execution start with the default 30-second threshold.
 EXEC analyzer.usp_AnalyzeWhoIsActiveLongRunning;
 GO
 -- Rebuild a past day explicitly when needed.

@@ -1,6 +1,6 @@
 # 長時間 SQL 每日回顧
 
-`analyzer.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間當天 00:00 至本次執行開始時、已執行至少 300 秒的 Request。
+`analyzer.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間當天 00:00 至本次執行開始時、已執行至少 30 秒的 Request。
 
 |物件|用途|
 |---|---|
@@ -15,7 +15,7 @@
 |參數|預設值|用途|
 |---|---|---|
 |`@AnalysisDate`|今天|指定過去日期時分析完整日；今天截止於執行開始時|
-|`@MinDurationSeconds`|300|最低執行時間，單位秒；必須為正整數|
+|`@MinDurationSeconds`|30|最低執行時間，單位秒；必須為正整數|
 |`@ReturnResults`|1|設為 0 只寫入資料表|
 |`@AnalysisRunId OUTPUT`|NULL|回傳本次執行編號|
 
@@ -23,7 +23,7 @@
 
 ## 判讀
 
-SP 依序建立採樣 `#Capture`、Request 彙總 `#Requests`、採樣排序 `#LatestSamples`，最後寫入報表。各步驟分開呈現；Request 分組、300 秒預設門檻及最後採樣的選取規則維持不變。
+SP 依序建立採樣 `#Capture`、Request 彙總 `#Requests`、採樣排序 `#LatestSamples`，最後寫入報表。各步驟分開呈現；Request 分組、30 秒預設門檻及最後採樣的選取規則維持不變。
 
 - Request 以 `session_id`、`login_time`、`request_id`、`start_time` 分組。相同 Session 的不同 Request 起始時間會分開記錄。
 - 只分析 `session_id > 50` 且具有完整 Request 識別欄位的採樣；排除 `sleeping`、`dormant`、`background`。閒置未提交交易應由其他分析處理。
@@ -42,6 +42,8 @@ SP 依序建立採樣 `#Capture`、Request 彙總 `#Requests`、採樣排序 `#L
 
 ## 驗證
 
-已在 WIN2019LAB 部署，並以一個不修改資料的等待查詢驗證：未達 300 秒時不列入；超過門檻後 6 次採樣合併成 1 筆，最長觀察時間 345.393 秒。同日重跑仍只有 1 筆。測試查詢已自然結束，未留下測試帳號或測試腳本。完整佈署流程及 SQL Server Agent 三個分析步驟均執行成功。
+2026-11-18 已將預設門檻改為 30 秒並部署到 WIN2019LAB，七組固定案例全部通過。LAB 當地日期 2026-11-17 的實際採樣重算成功，執行編號 18，來源 21 筆、結果 3 筆。案例及結果見 `../Tests/LongRunningSQL_README.md`。每日分析 Job 未指定門檻，會使用新的預設值。WhoIsActive 仍每分鐘採樣，未保證捕捉所有持續 30 秒的 Request。
+
+先前以 300 秒門檻在 WIN2019LAB 部署，並以一個不修改資料的等待查詢驗證：未達 300 秒時不列入；超過門檻後 6 次採樣合併成 1 筆，最長觀察時間 345.393 秒。同日重跑仍只有 1 筆。測試查詢已自然結束，未留下測試帳號或測試腳本。完整佈署流程及 SQL Server Agent 三個分析步驟均執行成功。
 
 當天的截止時間在每次 SP 開始時固定，使用起點包含、截止不包含的區間。指定過去日期仍分析完整日。午夜後預設日期轉為新的一天，前一日尾段不會自動補跑。

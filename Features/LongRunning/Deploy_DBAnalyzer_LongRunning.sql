@@ -44,7 +44,7 @@ END;
 GO
 CREATE OR ALTER PROCEDURE analyzer.usp_AnalyzeWhoIsActiveLongRunning
  @AnalysisDate date=NULL,
- @MinDurationSeconds int=300,
+ @MinDurationSeconds int=30,
  @ReturnResults bit=1,
  @AnalysisRunId bigint=NULL OUTPUT
 AS
