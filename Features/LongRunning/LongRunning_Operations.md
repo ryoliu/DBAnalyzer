@@ -1,11 +1,11 @@
 # 長時間 SQL 每日回顧
 
-`dbo.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間前一天、已執行至少 300 秒的 Request。
+`analyzer.usp_AnalyzeWhoIsActiveLongRunning` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設收集 VM 當地時間前一天、已執行至少 300 秒的 Request。
 
 |物件|用途|
 |---|---|
-|`dbo.LongRunningSql`|每個日期、每個 Request 一筆結果|
-|`dbo.LongRunningSqlAnalysisRun`|執行日期、門檻、來源筆數、結果筆數、狀態與錯誤|
+|`analyzer.LongRunningSql`|每個日期、每個 Request 一筆結果|
+|`analyzer.LongRunningSqlAnalysisRun`|執行日期、門檻、來源筆數、結果筆數、狀態與錯誤|
 |`_DBAnalyzer-Daily` 第 3 步|每天 VM 當地時間 02:00 啟動的共用 Job，前兩步成功後執行|
 
 ## 使用

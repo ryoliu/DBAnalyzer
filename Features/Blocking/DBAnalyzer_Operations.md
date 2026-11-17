@@ -17,7 +17,7 @@ WhoIsActive 保持每分鐘收集、來源保留 7 天。原本每 5 分鐘的�
 
 `Run_BlockingAnalyzer.sql` 提供範例。SP 只有三個參數：`@AnalysisDate`、`@ReturnResults`、`@AnalysisRunId OUTPUT`。不指定日期即分析 VM 當地時間的前一天；指定當天則產生尚未完整的當日日報。時間不自動轉換為台灣時間。
 
-報表查 `dbo.vBlockingIncident`、`dbo.vBlockingDetail`，以 `analysis_date` 篩選日期。執行紀錄查 `dbo.BlockingAnalysisRun`。`is_current_daily=1` 表示該日期目前有效的日報，成功重跑前的執行紀錄保留，但其事件與明細被取代。事件編號只屬於該次日報，不保證重跑後不變。
+報表查 `analyzer.vBlockingIncident`、`analyzer.vBlockingDetail`，以 `analysis_date` 篩選日期。執行紀錄查 `analyzer.BlockingAnalysisRun`。`is_current_daily=1` 表示該日期目前有效的日報，成功重跑前的執行紀錄保留，但其事件與明細被取代。事件編號只屬於該次日報，不保證重跑後不變。
 
 已移除增量進度、處理位置更新及跨次事件合併。每次只讀指定日的資料並重新分組。分析及清除 SP 均已移除應用程式執行鎖（sp_getapplock／sp_releaseapplock）。寫入仍使用交易，重跑失敗時上一份日報完整保留。同一日期的分析應依序執行，避免手動執行與排程重疊。
 

@@ -1,7 +1,7 @@
 #requires -Version 7.0
 param(
     [pscredential]$Credential,
-    [string]$ServerInstance = 'tcp:192.168.56.104,1433'
+    [string]$ServerInstance = 'tcp:192.168.56.202,1433'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,7 +65,7 @@ SET @RunId=SCOPE_IDENTITY();
 INSERT $schema.LoginFailed
     (analysis_run_id,analysis_date,log_date,archive_number,login_name,raw_message)
 SELECT @RunId,d,CONVERT(datetime,d),0,N'Seed',N'Preserve this seed'
-FROM (VALUES(@Day),(DATEADD(DAY,-31,@Day)),(DATEADD(DAY,-29,@Day))) dates(d);
+FROM (VALUES(@Day),(DATEADD(DAY,-31,@Day)),(DATEADD(DAY,-28,@Day))) dates(d);
 INSERT $schema.LoginFailedSummary
     (analysis_run_id,analysis_date,failure_category,failure_count,
      affected_login_count,affected_client_count,first_failure,last_failure)
@@ -99,29 +99,29 @@ IF APPLOCK_MODE(N'public',N'DBAnalyzer.LoginFailed',N'Session')<>N'NoLock'
             $connection.Open()
             Write-Host (Get-TestScalar @'
 SELECT SERVERPROPERTY('ServerName') AS server_name,ORIGINAL_LOGIN() AS login_name,
-       SERVERPROPERTY('ProductVersion') AS product_version,HAS_DBACCESS(N'DBAnalyzer') AS has_access
+       SERVERPROPERTY('ProductVersion') AS product_version,HAS_DBACCESS(N'MS_PERF_COLLECTION') AS has_access
 FOR JSON PATH,WITHOUT_ARRAY_WRAPPER;
 '@)
             Write-Host (Get-TestScalar @'
 SELECT COUNT_BIG(*) AS existing_detail_count,MIN(analysis_date) AS first_date,
-       MAX(analysis_date) AS last_date FROM DBAnalyzer.dbo.LoginFailed
+       MAX(analysis_date) AS last_date FROM MS_PERF_COLLECTION.analyzer.LoginFailed
 FOR JSON PATH,WITHOUT_ARRAY_WRAPPER;
 '@)
             $historyQuery = @'
-SELECT analysis_date,COUNT_BIG(*) AS failure_count
-FROM DBAnalyzer.dbo.LoginFailed
-WHERE analysis_date>=DATEADD(DAY,-30,CONVERT(date,GETDATE()))
-GROUP BY analysis_date ORDER BY analysis_date FOR JSON PATH;
+SELECT (SELECT analysis_date,COUNT_BIG(*) AS failure_count
+FROM MS_PERF_COLLECTION.analyzer.LoginFailed
+WHERE analysis_date>=DATEADD(DAY,-29,CONVERT(date,GETDATE()))
+GROUP BY analysis_date ORDER BY analysis_date FOR JSON PATH) AS history_json;
 '@
             $existingHistory = Get-TestScalar $historyQuery
-            $existingProcedure = Get-TestScalar "SELECT CONVERT(varchar(64),HASHBYTES('SHA2_256',definition),2) FROM DBAnalyzer.sys.sql_modules WHERE object_id=OBJECT_ID(N'DBAnalyzer.dbo.usp_AnalyzeLoginFailed');"
+            $existingProcedure = Get-TestScalar "SELECT CONVERT(varchar(64),HASHBYTES('SHA2_256',definition),2) FROM MS_PERF_COLLECTION.sys.sql_modules WHERE object_id=OBJECT_ID(N'MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed');"
             Invoke-TestSql 'USE tempdb;'
             Invoke-TestSql "CREATE SCHEMA $schema;"
             $schemaCreated = $true
             $deployment = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Deploy_DBAnalyzer_LoginFailed.sql') -Raw
-            $deployment = $deployment.Replace('USE DBAnalyzer;', 'USE tempdb;')
+            $deployment = $deployment.Replace('USE MS_PERF_COLLECTION;', 'USE tempdb;')
             foreach ($name in @('LoginFailedAnalysisRun','LoginFailedSummary','vLoginFailedClassified','usp_AnalyzeLoginFailed','LoginFailed')) {
-                $deployment = $deployment.Replace('dbo.' + $name, $schema + '.' + $name)
+                $deployment = $deployment.Replace('analyzer.' + $name, $schema + '.' + $name)
             }
             $batches = [regex]::Split($deployment, '(?im)^\s*GO\s*\r?$')
             foreach ($batch in $batches) {
@@ -151,7 +151,7 @@ GROUP BY analysis_date ORDER BY analysis_date FOR JSON PATH;
                     Invoke-TestSql @"
 IF EXISTS(
  SELECT log_date,login_name,client_address,failure_reason,error_number,severity,error_state,raw_message,COUNT_BIG(*) AS copies
- FROM DBAnalyzer.dbo.LoginFailed WHERE analysis_date='$analysisDate'
+ FROM MS_PERF_COLLECTION.analyzer.LoginFailed WHERE analysis_date='$analysisDate'
  GROUP BY log_date,login_name,client_address,failure_reason,error_number,severity,error_state,raw_message
  EXCEPT
  SELECT log_date,login_name,client_address,failure_reason,error_number,severity,error_state,raw_message,COUNT_BIG(*)
@@ -231,10 +231,10 @@ IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE login_name=N'Ambiguous' AND e
 IF NOT EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE login_name=N'' AND client_address=N'<local machine>')
     OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE login_name IS NULL AND raw_message LIKE N'%Malformed%')
     THROW 57107,'Empty or malformed login parsing failed.',1;
-IF EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date<DATEADD(DAY,-30,CONVERT(date,GETDATE())))
-    OR EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date<DATEADD(DAY,-30,CONVERT(date,GETDATE())))
-    OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date=DATEADD(DAY,-30,CONVERT(date,GETDATE())))
-    OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date=DATEADD(DAY,-30,CONVERT(date,GETDATE())))
+IF EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date<DATEADD(DAY,-29,CONVERT(date,GETDATE())))
+    OR EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date<DATEADD(DAY,-29,CONVERT(date,GETDATE())))
+    OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailed WHERE analysis_date=DATEADD(DAY,-29,CONVERT(date,GETDATE())))
+    OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailedSummary WHERE analysis_date=DATEADD(DAY,-29,CONVERT(date,GETDATE())))
     OR NOT EXISTS(SELECT 1 FROM $schema.LoginFailedAnalysisRun WHERE source_server=N'Test')
     THROW 57108,'Retention boundary or run-history preservation failed.',1;
 EXEC $schema.usp_AnalyzeLoginFailed @ReturnResults=0;
@@ -296,10 +296,10 @@ IF (SELECT COUNT(*) FROM $schema.LoginFailed WHERE analysis_date=CONVERT(date,@D
             } finally { $lockConnection.Dispose() }
             Write-Host 'PASS: concurrent collection refuses immediately and preserves existing data'
             if ((Get-TestScalar $historyQuery) -ne $existingHistory -or
-                (Get-TestScalar "SELECT CONVERT(varchar(64),HASHBYTES('SHA2_256',definition),2) FROM DBAnalyzer.sys.sql_modules WHERE object_id=OBJECT_ID(N'DBAnalyzer.dbo.usp_AnalyzeLoginFailed');") -ne $existingProcedure) {
-                throw 'Existing DBAnalyzer history or procedure changed during testing.'
+                (Get-TestScalar "SELECT CONVERT(varchar(64),HASHBYTES('SHA2_256',definition),2) FROM MS_PERF_COLLECTION.sys.sql_modules WHERE object_id=OBJECT_ID(N'MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed');") -ne $existingProcedure) {
+                throw 'Existing analyzer history or procedure changed during testing.'
             }
-            Write-Host 'PASS: existing DBAnalyzer history counts and procedure definition are unchanged'
+            Write-Host 'PASS: existing analyzer history counts and procedure definition are unchanged'
         } finally {
             if ($schemaCreated -and $connection.State -eq 'Open') {
                 Invoke-TestSql @"
@@ -314,7 +314,7 @@ IF OBJECT_ID(N'$schema.SourceLog',N'U') IS NOT NULL DROP TABLE $schema.SourceLog
 IF OBJECT_ID(N'$schema.Control',N'U') IS NOT NULL DROP TABLE $schema.Control;
 DROP SCHEMA $schema;
 "@
-                Write-Host 'CLEANUP: isolated test schema removed; DBAnalyzer objects were not changed'
+                Write-Host 'CLEANUP: isolated test schema removed; analyzer objects were not changed'
             }
             $connection.Dispose()
         }

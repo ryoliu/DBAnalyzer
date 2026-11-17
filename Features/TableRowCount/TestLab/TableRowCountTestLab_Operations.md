@@ -7,13 +7,13 @@
 |`TableRowCountTestLab`|獨立測試資料庫，首次建立時設定 SIMPLE recovery|
 |`dbo.SampleRows`|累積測試資料，包含批次編號、建立時間及 100 字元固定內容|
 |`dbo.StartupLoadRun`|每批的 SQL Server 啟動時間、執行起訖時間及插入前後實際筆數|
-|`dbo.usp_LoadStartupTestRows`|預設插入 1,000 筆，同一次 SQL Server 啟動只允許成功插入一批|
+|`analyzer.usp_LoadStartupTestRows`|預設插入 1,000 筆，同一次 SQL Server 啟動只允許成功插入一批|
 |`_DBAnalyzer-TestRows-Startup`|第一步插入資料，第二步執行現有筆數收集 SP|
 |`_DBAnalyzer-TestRows-AgentStart`|Agent 啟動時執行，freq_type=64|
 
 ## 自動執行方式
 
-VM 正常開機後，SQL Server 與 SQL Server Agent 自動啟動，Job 插入一批資料，然後執行 `DBAnalyzer.dbo.usp_CaptureTableRowCount @ReturnResults=0`。兩個服務已確認為 Automatic、Running。這是 SQL Server Agent 的啟動排程，設定依據見 [Microsoft 文件](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-add-schedule-transact-sql?view=sql-server-ver17)。
+VM 正常開機後，SQL Server 與 SQL Server Agent 自動啟動，Job 插入一批資料，然後執行 `MS_PERF_COLLECTION.analyzer.usp_CaptureTableRowCount @ReturnResults=0`。兩個服務已確認為 Automatic、Running。這是 SQL Server Agent 的啟動排程，設定依據見 [Microsoft 文件](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-add-schedule-transact-sql?view=sql-server-ver17)。
 
 SP 以 `sys.dm_os_sys_info.sqlserver_start_time` 辨識啟動批次，並使用交易執行鎖避免同時插入。同一次 SQL Server 啟動時，手動重跑、Job 重試或僅重新啟動 Agent 都不會再插入資料，但 Job 第二步仍會更新當日快照。若插入失敗，該批資料及批次紀錄全部回滾，錯誤可在 Agent Job 歷史查看；快照失敗則保留已成功插入的批次，Job 重試不會重複插入。
 
@@ -38,7 +38,7 @@ FROM TableRowCountTestLab.dbo.StartupLoadRun
 ORDER BY load_run_id DESC;
 
 SELECT snapshot_date,row_count,UsedMB,captured_at
-FROM DBAnalyzer.dbo.TableRowCountSnapshot
+FROM MS_PERF_COLLECTION.analyzer.TableRowCountSnapshot
 WHERE database_name=N'TableRowCountTestLab' AND table_name=N'SampleRows'
 ORDER BY snapshot_date;
 ```

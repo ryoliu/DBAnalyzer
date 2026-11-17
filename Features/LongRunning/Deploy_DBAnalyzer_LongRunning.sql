@@ -1,11 +1,7 @@
-USE master;
+USE MS_PERF_COLLECTION;
 GO
-IF DB_ID(N'DBAnalyzer') IS NULL EXEC(N'CREATE DATABASE [DBAnalyzer]');
-GO
-USE DBAnalyzer;
-GO
-IF OBJECT_ID(N'dbo.LongRunningSqlAnalysisRun',N'U') IS NULL
- CREATE TABLE dbo.LongRunningSqlAnalysisRun(
+IF OBJECT_ID(N'analyzer.LongRunningSqlAnalysisRun',N'U') IS NULL
+ CREATE TABLE analyzer.LongRunningSqlAnalysisRun(
   analysis_run_id bigint IDENTITY PRIMARY KEY,
   analysis_date date NOT NULL,
   min_duration_seconds int NOT NULL,
@@ -19,11 +15,11 @@ IF OBJECT_ID(N'dbo.LongRunningSqlAnalysisRun',N'U') IS NULL
   error_number int NULL,
   error_message nvarchar(4000) NULL);
 GO
-IF OBJECT_ID(N'dbo.LongRunningSql',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.LongRunningSql',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.LongRunningSql(
+ CREATE TABLE analyzer.LongRunningSql(
   long_running_sql_id bigint IDENTITY PRIMARY KEY,
-  analysis_run_id bigint NOT NULL REFERENCES dbo.LongRunningSqlAnalysisRun(analysis_run_id),
+  analysis_run_id bigint NOT NULL REFERENCES analyzer.LongRunningSqlAnalysisRun(analysis_run_id),
   analysis_date date NOT NULL,
   session_id smallint NOT NULL,
   login_time datetime NOT NULL,
@@ -42,11 +38,11 @@ BEGIN
   last_blocking_session_id smallint NULL,
   last_sql_text nvarchar(max) NULL,
   last_sql_command nvarchar(max) NULL);
- CREATE UNIQUE INDEX UX_LongRunningSql_Request ON dbo.LongRunningSql
+ CREATE UNIQUE INDEX UX_LongRunningSql_Request ON analyzer.LongRunningSql
   (analysis_date,session_id,login_time,request_id,request_start_time);
 END;
 GO
-CREATE OR ALTER PROCEDURE dbo.usp_AnalyzeWhoIsActiveLongRunning
+CREATE OR ALTER PROCEDURE analyzer.usp_AnalyzeWhoIsActiveLongRunning
  @AnalysisDate date=NULL,
  @MinDurationSeconds int=300,
  @ReturnResults bit=1,
@@ -64,7 +60,7 @@ BEGIN
  DECLARE @FromTime datetime=CONVERT(datetime,@AnalysisDate),
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate));
  BEGIN TRY
-  INSERT dbo.LongRunningSqlAnalysisRun(analysis_date,min_duration_seconds,
+  INSERT analyzer.LongRunningSqlAnalysisRun(analysis_date,min_duration_seconds,
    started_at_utc,source_server,source_time_at_start,status)
   VALUES(@AnalysisDate,@MinDurationSeconds,SYSUTCDATETIME(),
    CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),SYSDATETIMEOFFSET(),'RUNNING');
@@ -79,13 +75,13 @@ BEGIN
    COALESCE(NULLIF(sql_command.value('(processing-instruction("query"))[1]','nvarchar(max)'),N''),
     NULLIF(sql_command.value('.','nvarchar(max)'),N''),CONVERT(nvarchar(max),sql_command)) AS sql_command
   INTO #Capture
-  FROM MS_PERF_COLLECTION.dbo.WHOISACTIVE
+  FROM dbo.WHOISACTIVE
   WHERE collection_time>=@FromTime AND collection_time<@ToTime
    AND session_id>50 AND login_time IS NOT NULL AND request_id IS NOT NULL
    AND status NOT IN('sleeping','dormant','background') AND start_time<=collection_time;
 
   BEGIN TRANSACTION;
-  DELETE dbo.LongRunningSql WHERE analysis_date=@AnalysisDate;
+  DELETE analyzer.LongRunningSql WHERE analysis_date=@AnalysisDate;
 
   -- Summarize each request and keep those reaching the duration threshold.
   SELECT session_id,login_time,request_id,start_time,
@@ -103,7 +99,7 @@ BEGIN
   INTO #LatestSamples
   FROM #Capture;
 
-  INSERT dbo.LongRunningSql(analysis_run_id,analysis_date,session_id,login_time,
+  INSERT analyzer.LongRunningSql(analysis_run_id,analysis_date,session_id,login_time,
    request_id,request_start_time,first_observed_time,last_observed_time,
    observed_sample_count,max_elapsed_seconds,database_name,login_name,host_name,
    program_name,last_status,last_wait_info,last_blocking_session_id,last_sql_text,last_sql_command)
@@ -114,7 +110,7 @@ BEGIN
   FROM #Requests r JOIN #LatestSamples l ON l.session_id=r.session_id AND l.login_time=r.login_time
    AND l.request_id=r.request_id AND l.start_time=r.start_time AND l.sample_rank=1;
 
-  UPDATE dbo.LongRunningSqlAnalysisRun
+  UPDATE analyzer.LongRunningSqlAnalysisRun
   SET request_count=@@ROWCOUNT,captured_row_count=(SELECT COUNT_BIG(*) FROM #Capture),
    completed_at_utc=SYSUTCDATETIME(),status='SUCCEEDED'
   WHERE analysis_run_id=@AnalysisRunId;
@@ -122,15 +118,15 @@ BEGIN
  END TRY
  BEGIN CATCH
   IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
-  UPDATE dbo.LongRunningSqlAnalysisRun SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),
+  UPDATE analyzer.LongRunningSqlAnalysisRun SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),
    error_number=ERROR_NUMBER(),error_message=ERROR_MESSAGE()
   WHERE analysis_run_id=@AnalysisRunId;
   THROW;
  END CATCH;
  IF @ReturnResults=1
  BEGIN
-  SELECT * FROM dbo.LongRunningSqlAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
-  SELECT * FROM dbo.LongRunningSql WHERE analysis_run_id=@AnalysisRunId
+  SELECT * FROM analyzer.LongRunningSqlAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
+  SELECT * FROM analyzer.LongRunningSql WHERE analysis_run_id=@AnalysisRunId
    ORDER BY max_elapsed_seconds DESC;
  END;
 END;

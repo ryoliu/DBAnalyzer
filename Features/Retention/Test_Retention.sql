@@ -4,26 +4,26 @@ GO
 IF SCHEMA_ID(N'RetentionTest') IS NOT NULL THROW 58520, 'RetentionTest schema already exists.', 1;
 EXEC(N'CREATE SCHEMA RetentionTest');
 GO
-SELECT TOP (0) * INTO RetentionTest.BlockingAnalysisRun FROM DBAnalyzer.dbo.BlockingAnalysisRun;
-SELECT TOP (0) * INTO RetentionTest.BlockingIncident FROM DBAnalyzer.dbo.BlockingIncident;
-SELECT TOP (0) * INTO RetentionTest.BlockingDetail FROM DBAnalyzer.dbo.BlockingDetail;
-SELECT TOP (0) * INTO RetentionTest.HighResourceSqlAnalysisRun FROM DBAnalyzer.dbo.HighResourceSqlAnalysisRun;
-SELECT TOP (0) * INTO RetentionTest.HighResourceSql FROM DBAnalyzer.dbo.HighResourceSql;
-SELECT TOP (0) * INTO RetentionTest.LoginFailedAnalysisRun FROM DBAnalyzer.dbo.LoginFailedAnalysisRun;
-SELECT TOP (0) * INTO RetentionTest.LoginFailed FROM DBAnalyzer.dbo.LoginFailed;
-SELECT TOP (0) * INTO RetentionTest.LoginFailedSummary FROM DBAnalyzer.dbo.LoginFailedSummary;
-SELECT TOP (0) * INTO RetentionTest.LongRunningSqlAnalysisRun FROM DBAnalyzer.dbo.LongRunningSqlAnalysisRun;
-SELECT TOP (0) * INTO RetentionTest.LongRunningSql FROM DBAnalyzer.dbo.LongRunningSql;
-SELECT TOP (0) * INTO RetentionTest.TableRowCountRun FROM DBAnalyzer.dbo.TableRowCountRun;
-SELECT TOP (0) * INTO RetentionTest.TableRowCountSnapshot FROM DBAnalyzer.dbo.TableRowCountSnapshot;
+SELECT TOP (0) * INTO RetentionTest.BlockingAnalysisRun FROM MS_PERF_COLLECTION.analyzer.BlockingAnalysisRun;
+SELECT TOP (0) * INTO RetentionTest.BlockingIncident FROM MS_PERF_COLLECTION.analyzer.BlockingIncident;
+SELECT TOP (0) * INTO RetentionTest.BlockingDetail FROM MS_PERF_COLLECTION.analyzer.BlockingDetail;
+SELECT TOP (0) * INTO RetentionTest.HighResourceSqlAnalysisRun FROM MS_PERF_COLLECTION.analyzer.HighResourceSqlAnalysisRun;
+SELECT TOP (0) * INTO RetentionTest.HighResourceSql FROM MS_PERF_COLLECTION.analyzer.HighResourceSql;
+SELECT TOP (0) * INTO RetentionTest.LoginFailedAnalysisRun FROM MS_PERF_COLLECTION.analyzer.LoginFailedAnalysisRun;
+SELECT TOP (0) * INTO RetentionTest.LoginFailed FROM MS_PERF_COLLECTION.analyzer.LoginFailed;
+SELECT TOP (0) * INTO RetentionTest.LoginFailedSummary FROM MS_PERF_COLLECTION.analyzer.LoginFailedSummary;
+SELECT TOP (0) * INTO RetentionTest.LongRunningSqlAnalysisRun FROM MS_PERF_COLLECTION.analyzer.LongRunningSqlAnalysisRun;
+SELECT TOP (0) * INTO RetentionTest.LongRunningSql FROM MS_PERF_COLLECTION.analyzer.LongRunningSql;
+SELECT TOP (0) * INTO RetentionTest.TableRowCountRun FROM MS_PERF_COLLECTION.analyzer.TableRowCountRun;
+SELECT TOP (0) * INTO RetentionTest.TableRowCountSnapshot FROM MS_PERF_COLLECTION.analyzer.TableRowCountSnapshot;
 
 DECLARE @Table sysname, @Columns nvarchar(max), @Sql nvarchar(max);
 DECLARE TableKeys CURSOR LOCAL FAST_FORWARD FOR
  SELECT t.name, STRING_AGG(CONVERT(nvarchar(max), QUOTENAME(c.name)), N',')
  WITHIN GROUP (ORDER BY ic.key_ordinal)
- FROM DBAnalyzer.sys.tables t JOIN DBAnalyzer.sys.indexes i ON i.object_id=t.object_id AND i.is_primary_key=1
- JOIN DBAnalyzer.sys.index_columns ic ON ic.object_id=i.object_id AND ic.index_id=i.index_id
- JOIN DBAnalyzer.sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
+ FROM MS_PERF_COLLECTION.sys.tables t JOIN MS_PERF_COLLECTION.sys.indexes i ON i.object_id=t.object_id AND i.is_primary_key=1
+ JOIN MS_PERF_COLLECTION.sys.index_columns ic ON ic.object_id=i.object_id AND ic.index_id=i.index_id
+ JOIN MS_PERF_COLLECTION.sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
  WHERE t.name IN (N'BlockingAnalysisRun',N'BlockingIncident',N'BlockingDetail',N'HighResourceSqlAnalysisRun',N'HighResourceSql',N'LoginFailedAnalysisRun',N'LoginFailed',N'LoginFailedSummary',N'LongRunningSqlAnalysisRun',N'LongRunningSql',N'TableRowCountRun',N'TableRowCountSnapshot') AND ic.key_ordinal>0
  GROUP BY t.name;
 OPEN TableKeys;
@@ -199,10 +199,10 @@ BEGIN
  WHEN ty.name='datetimeoffset' THEN N'TODATETIMEOFFSET(CONVERT(datetime2,@Date),''+00:00'')'
  WHEN ty.name='uniqueidentifier' THEN N'NEWID()'
  ELSE N'1' END),N',') WITHIN GROUP(ORDER BY c.column_id)
- FROM DBAnalyzer.sys.columns c JOIN DBAnalyzer.sys.types ty ON ty.user_type_id=c.user_type_id
- WHERE c.object_id=OBJECT_ID(N'DBAnalyzer.dbo.'+@Table);
- SELECT @Identity=CONVERT(bit,COUNT(*)) FROM DBAnalyzer.sys.columns
- WHERE object_id=OBJECT_ID(N'DBAnalyzer.dbo.'+@Table) AND is_identity=1;
+ FROM MS_PERF_COLLECTION.sys.columns c JOIN MS_PERF_COLLECTION.sys.types ty ON ty.user_type_id=c.user_type_id
+ WHERE c.object_id=OBJECT_ID(N'MS_PERF_COLLECTION.analyzer.'+@Table);
+ SELECT @Identity=CONVERT(bit,COUNT(*)) FROM MS_PERF_COLLECTION.sys.columns
+ WHERE object_id=OBJECT_ID(N'MS_PERF_COLLECTION.analyzer.'+@Table) AND is_identity=1;
  SET @Sql=CASE WHEN @Identity=1 THEN N'SET IDENTITY_INSERT RetentionTest.'+QUOTENAME(@Table)+N' ON;' ELSE N'' END
   +N'INSERT RetentionTest.'+QUOTENAME(@Table)+N'('+@Columns+N') SELECT '+@Values+N';'
   +CASE WHEN @Identity=1 THEN N'SET IDENTITY_INSERT RetentionTest.'+QUOTENAME(@Table)+N' OFF;' ELSE N'' END;

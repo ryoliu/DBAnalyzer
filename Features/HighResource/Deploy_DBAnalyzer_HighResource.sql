@@ -1,11 +1,7 @@
-USE master;
+USE MS_PERF_COLLECTION;
 GO
-IF DB_ID(N'DBAnalyzer') IS NULL EXEC(N'CREATE DATABASE [DBAnalyzer]');
-GO
-USE DBAnalyzer;
-GO
-IF OBJECT_ID(N'dbo.HighResourceSqlAnalysisRun',N'U') IS NULL
- CREATE TABLE dbo.HighResourceSqlAnalysisRun(
+IF OBJECT_ID(N'analyzer.HighResourceSqlAnalysisRun',N'U') IS NULL
+ CREATE TABLE analyzer.HighResourceSqlAnalysisRun(
   analysis_run_id bigint IDENTITY PRIMARY KEY,
   analysis_date date NOT NULL,
   top_n int NOT NULL,
@@ -20,11 +16,11 @@ IF OBJECT_ID(N'dbo.HighResourceSqlAnalysisRun',N'U') IS NULL
   error_number int NULL,
   error_message nvarchar(4000) NULL);
 GO
-IF OBJECT_ID(N'dbo.HighResourceSql',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.HighResourceSql',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.HighResourceSql(
+ CREATE TABLE analyzer.HighResourceSql(
   high_resource_sql_id bigint IDENTITY PRIMARY KEY,
-  analysis_run_id bigint NOT NULL REFERENCES dbo.HighResourceSqlAnalysisRun(analysis_run_id),
+  analysis_run_id bigint NOT NULL REFERENCES analyzer.HighResourceSqlAnalysisRun(analysis_run_id),
   analysis_date date NOT NULL,
   session_id smallint NOT NULL,
   login_time datetime NOT NULL,
@@ -45,11 +41,11 @@ BEGIN
   last_wait_info nvarchar(4000) NULL,
   last_sql_text nvarchar(max) NULL,
   last_sql_command nvarchar(max) NULL);
- CREATE UNIQUE INDEX UX_HighResourceSql_Request ON dbo.HighResourceSql
+ CREATE UNIQUE INDEX UX_HighResourceSql_Request ON analyzer.HighResourceSql
   (analysis_date,session_id,login_time,request_id,request_start_time);
 END;
 GO
-CREATE OR ALTER PROCEDURE dbo.usp_AnalyzeWhoIsActiveHighResource
+CREATE OR ALTER PROCEDURE analyzer.usp_AnalyzeWhoIsActiveHighResource
  @AnalysisDate date=NULL,
  @TopN int=20,
  @ReturnResults bit=1,
@@ -66,7 +62,7 @@ BEGIN
  DECLARE @FromTime datetime=CONVERT(datetime,@AnalysisDate),
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate));
  BEGIN TRY
-  INSERT dbo.HighResourceSqlAnalysisRun(analysis_date,top_n,started_at_utc,
+  INSERT analyzer.HighResourceSqlAnalysisRun(analysis_date,top_n,started_at_utc,
    source_server,source_time_at_start,status)
   VALUES(@AnalysisDate,@TopN,SYSUTCDATETIME(),
    CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),SYSDATETIMEOFFSET(),'RUNNING');
@@ -82,7 +78,7 @@ BEGIN
    COALESCE(NULLIF(sql_command.value('(processing-instruction("query"))[1]','nvarchar(max)'),N''),
     NULLIF(sql_command.value('.','nvarchar(max)'),N''),CONVERT(nvarchar(max),sql_command)) AS sql_command
   INTO #Capture
-  FROM MS_PERF_COLLECTION.dbo.WHOISACTIVE
+  FROM dbo.WHOISACTIVE
   WHERE collection_time>=@FromTime AND collection_time<@ToTime
    AND session_id>50 AND login_time IS NOT NULL AND request_id IS NOT NULL
    AND status NOT IN('sleeping','dormant','background') AND start_time<=collection_time;
@@ -90,7 +86,7 @@ BEGIN
   UPDATE #Capture SET logical_reads=NULL WHERE logical_reads<0;
 
   BEGIN TRANSACTION;
-  DELETE dbo.HighResourceSql WHERE analysis_date=@AnalysisDate;
+  DELETE analyzer.HighResourceSql WHERE analysis_date=@AnalysisDate;
 
   -- Counters are cumulative per request. Use MAX, never SUM across samples.
   SELECT session_id,login_time,request_id,start_time,
@@ -117,7 +113,7 @@ BEGIN
   INTO #LatestSamples
   FROM #Capture;
 
-  INSERT dbo.HighResourceSql(analysis_run_id,analysis_date,session_id,login_time,
+  INSERT analyzer.HighResourceSql(analysis_run_id,analysis_date,session_id,login_time,
    request_id,request_start_time,first_observed_time,last_observed_time,observed_sample_count,
    max_cpu_ms,max_logical_reads,cpu_rank,logical_reads_rank,database_name,login_name,
    host_name,program_name,last_status,last_wait_info,last_sql_text,last_sql_command)
@@ -129,7 +125,7 @@ BEGIN
    AND l.request_id=r.request_id AND l.start_time=r.start_time AND l.sample_rank=1
   WHERE r.cpu_rank<=@TopN OR r.logical_reads_rank<=@TopN;
 
-  UPDATE dbo.HighResourceSqlAnalysisRun
+  UPDATE analyzer.HighResourceSqlAnalysisRun
   SET request_count=@@ROWCOUNT,captured_row_count=(SELECT COUNT_BIG(*) FROM #Capture),
    unparsed_counter_rows=(SELECT COUNT_BIG(*) FROM #Capture WHERE cpu_ms IS NULL OR logical_reads IS NULL),
    completed_at_utc=SYSUTCDATETIME(),status='SUCCEEDED'
@@ -138,17 +134,17 @@ BEGIN
  END TRY
  BEGIN CATCH
   IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
-  UPDATE dbo.HighResourceSqlAnalysisRun SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),
+  UPDATE analyzer.HighResourceSqlAnalysisRun SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),
    error_number=ERROR_NUMBER(),error_message=ERROR_MESSAGE()
   WHERE analysis_run_id=@AnalysisRunId;
   THROW;
  END CATCH;
  IF @ReturnResults=1
  BEGIN
-  SELECT * FROM dbo.HighResourceSqlAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
-  SELECT * FROM dbo.HighResourceSql WHERE analysis_run_id=@AnalysisRunId AND cpu_rank<=@TopN
+  SELECT * FROM analyzer.HighResourceSqlAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
+  SELECT * FROM analyzer.HighResourceSql WHERE analysis_run_id=@AnalysisRunId AND cpu_rank<=@TopN
    ORDER BY cpu_rank;
-  SELECT * FROM dbo.HighResourceSql WHERE analysis_run_id=@AnalysisRunId AND logical_reads_rank<=@TopN
+  SELECT * FROM analyzer.HighResourceSql WHERE analysis_run_id=@AnalysisRunId AND logical_reads_rank<=@TopN
    ORDER BY logical_reads_rank;
  END;
 END;

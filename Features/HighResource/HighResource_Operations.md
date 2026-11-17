@@ -1,11 +1,11 @@
 # 高資源 SQL 每日回顧
 
-`dbo.usp_AnalyzeWhoIsActiveHighResource` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設分析 VM 當地時間前一天，分別產生 CPU 與邏輯讀取量前 20 名 Request。
+`analyzer.usp_AnalyzeWhoIsActiveHighResource` 分析 `MS_PERF_COLLECTION.dbo.WHOISACTIVE`，預設分析 VM 當地時間前一天，分別產生 CPU 與邏輯讀取量前 20 名 Request。
 
 |物件|用途|
 |---|---|
-|`dbo.HighResourceSql`|兩份排行榜的聯集；同一 Request 同時入榜只存一筆|
-|`dbo.HighResourceSqlAnalysisRun`|日期、Top N、來源筆數、無效計數器筆數、結果筆數與執行狀態|
+|`analyzer.HighResourceSql`|兩份排行榜的聯集；同一 Request 同時入榜只存一筆|
+|`analyzer.HighResourceSqlAnalysisRun`|日期、Top N、來源筆數、無效計數器筆數、結果筆數與執行狀態|
 |`_DBAnalyzer-Daily` 第 4 步|前面三個分析步驟成功後，分析前一天|
 
 ## 執行

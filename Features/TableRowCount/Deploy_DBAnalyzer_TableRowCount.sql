@@ -1,11 +1,7 @@
-USE master;
+USE MS_PERF_COLLECTION;
 GO
-IF DB_ID(N'DBAnalyzer') IS NULL EXEC(N'CREATE DATABASE [DBAnalyzer]');
-GO
-USE DBAnalyzer;
-GO
-IF OBJECT_ID(N'dbo.TableRowCountRun',N'U') IS NULL
- CREATE TABLE dbo.TableRowCountRun(
+IF OBJECT_ID(N'analyzer.TableRowCountRun',N'U') IS NULL
+ CREATE TABLE analyzer.TableRowCountRun(
   capture_run_id bigint IDENTITY PRIMARY KEY,
   snapshot_date date NOT NULL,
   started_at_utc datetime2(3) NOT NULL,
@@ -21,9 +17,9 @@ IF OBJECT_ID(N'dbo.TableRowCountRun',N'U') IS NULL
   error_number int NULL,
   error_message nvarchar(4000) NULL);
 GO
-IF OBJECT_ID(N'dbo.TableRowCountSnapshot',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.TableRowCountSnapshot',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.TableRowCountSnapshot(
+ CREATE TABLE analyzer.TableRowCountSnapshot(
   snapshot_date date NOT NULL,
   database_id int NOT NULL,
   database_guid uniqueidentifier NOT NULL,
@@ -35,19 +31,19 @@ BEGIN
   row_count bigint NULL CHECK(row_count>=0),
   UsedMB decimal(28,7) NULL CHECK(UsedMB>=0),
   captured_at datetime2(3) NOT NULL,
-  capture_run_id bigint NOT NULL REFERENCES dbo.TableRowCountRun(capture_run_id),
+  capture_run_id bigint NOT NULL REFERENCES analyzer.TableRowCountRun(capture_run_id),
   PRIMARY KEY(snapshot_date,database_id,database_guid,table_object_id,table_create_date));
- CREATE INDEX IX_TableRowCount_History ON dbo.TableRowCountSnapshot
+ CREATE INDEX IX_TableRowCount_History ON analyzer.TableRowCountSnapshot
   (database_id,database_guid,table_object_id,table_create_date,snapshot_date) INCLUDE(row_count);
 END;
 GO
 -- Existing history has no size measurement. Keep it NULL until recaptured.
-IF COL_LENGTH(N'dbo.TableRowCountSnapshot',N'UsedMB') IS NULL
- ALTER TABLE dbo.TableRowCountSnapshot ADD UsedMB decimal(28,7) NULL CHECK(UsedMB>=0);
-IF COL_LENGTH(N'dbo.TableRowCountRun',N'unavailable_size_table_count') IS NULL
- ALTER TABLE dbo.TableRowCountRun ADD unavailable_size_table_count int NULL;
+IF COL_LENGTH(N'analyzer.TableRowCountSnapshot',N'UsedMB') IS NULL
+ ALTER TABLE analyzer.TableRowCountSnapshot ADD UsedMB decimal(28,7) NULL CHECK(UsedMB>=0);
+IF COL_LENGTH(N'analyzer.TableRowCountRun',N'unavailable_size_table_count') IS NULL
+ ALTER TABLE analyzer.TableRowCountRun ADD unavailable_size_table_count int NULL;
 GO
-CREATE OR ALTER VIEW dbo.vTableRowCountGrowth
+CREATE OR ALTER VIEW analyzer.vTableRowCountGrowth
 AS
 WITH PreviousCounts AS(
  SELECT *,
@@ -55,7 +51,7 @@ WITH PreviousCounts AS(
    ORDER BY snapshot_date) AS previous_snapshot_date,
   LAG(row_count) OVER(PARTITION BY database_id,database_guid,table_object_id,table_create_date
    ORDER BY snapshot_date) AS previous_row_count
- FROM dbo.TableRowCountSnapshot
+ FROM analyzer.TableRowCountSnapshot
  WHERE row_count IS NOT NULL
 ), PreviousSizes AS(
  SELECT snapshot_date,database_id,database_guid,table_object_id,table_create_date,
@@ -63,7 +59,7 @@ WITH PreviousCounts AS(
    ORDER BY snapshot_date) AS previous_size_snapshot_date,
   LAG(UsedMB) OVER(PARTITION BY database_id,database_guid,table_object_id,table_create_date
    ORDER BY snapshot_date) AS previous_used_mb
- FROM dbo.TableRowCountSnapshot
+ FROM analyzer.TableRowCountSnapshot
  WHERE UsedMB IS NOT NULL
 )
 SELECT counts.*,
@@ -82,7 +78,7 @@ LEFT JOIN PreviousSizes sizes
  AND sizes.database_guid=counts.database_guid AND sizes.table_object_id=counts.table_object_id
  AND sizes.table_create_date=counts.table_create_date;
 GO
-CREATE OR ALTER VIEW dbo.vTableRowCountGrowthSummary
+CREATE OR ALTER VIEW analyzer.vTableRowCountGrowthSummary
 AS
 SELECT last_count.database_name,last_count.schema_name,last_count.table_name,
  history.database_id,history.database_guid,history.table_object_id,history.table_create_date,
@@ -102,15 +98,15 @@ FROM(
  SELECT database_id,database_guid,table_object_id,table_create_date,
   COUNT(*) AS snapshot_count,MIN(snapshot_date) AS first_snapshot_date,
   MAX(snapshot_date) AS last_snapshot_date
- FROM dbo.TableRowCountSnapshot
+ FROM analyzer.TableRowCountSnapshot
  WHERE row_count IS NOT NULL
  GROUP BY database_id,database_guid,table_object_id,table_create_date
 ) history
-JOIN dbo.TableRowCountSnapshot first_count
+JOIN analyzer.TableRowCountSnapshot first_count
  ON first_count.database_id=history.database_id AND first_count.database_guid=history.database_guid
  AND first_count.table_object_id=history.table_object_id AND first_count.table_create_date=history.table_create_date
  AND first_count.snapshot_date=history.first_snapshot_date
-JOIN dbo.TableRowCountSnapshot last_count
+JOIN analyzer.TableRowCountSnapshot last_count
  ON last_count.database_id=history.database_id AND last_count.database_guid=history.database_guid
  AND last_count.table_object_id=history.table_object_id AND last_count.table_create_date=history.table_create_date
  AND last_count.snapshot_date=history.last_snapshot_date
@@ -118,25 +114,25 @@ LEFT JOIN(
  SELECT database_id,database_guid,table_object_id,table_create_date,
   COUNT(*) AS used_mb_snapshot_count,MIN(snapshot_date) AS first_size_snapshot_date,
   MAX(snapshot_date) AS last_size_snapshot_date
- FROM dbo.TableRowCountSnapshot
+ FROM analyzer.TableRowCountSnapshot
  WHERE UsedMB IS NOT NULL
  GROUP BY database_id,database_guid,table_object_id,table_create_date
 ) sizes
  ON sizes.database_id=history.database_id AND sizes.database_guid=history.database_guid
  AND sizes.table_object_id=history.table_object_id AND sizes.table_create_date=history.table_create_date
-LEFT JOIN dbo.TableRowCountSnapshot first_size
+LEFT JOIN analyzer.TableRowCountSnapshot first_size
  ON first_size.database_id=sizes.database_id AND first_size.database_guid=sizes.database_guid
  AND first_size.table_object_id=sizes.table_object_id AND first_size.table_create_date=sizes.table_create_date
  AND first_size.snapshot_date=sizes.first_size_snapshot_date
-LEFT JOIN dbo.TableRowCountSnapshot last_size
+LEFT JOIN analyzer.TableRowCountSnapshot last_size
  ON last_size.database_id=sizes.database_id AND last_size.database_guid=sizes.database_guid
  AND last_size.table_object_id=sizes.table_object_id AND last_size.table_create_date=sizes.table_create_date
  AND last_size.snapshot_date=sizes.last_size_snapshot_date;
 GO
-CREATE OR ALTER VIEW dbo.vTableRowCountForecast
+CREATE OR ALTER VIEW analyzer.vTableRowCountForecast
 AS
 WITH Recent AS(
- SELECT * FROM dbo.TableRowCountSnapshot
+ SELECT * FROM analyzer.TableRowCountSnapshot
  WHERE snapshot_date>=DATEADD(DAY,-29,CONVERT(date,GETDATE()))
    AND snapshot_date<=CONVERT(date,GETDATE())
 ), History AS(
@@ -176,7 +172,7 @@ SELECT *,
   ELSE last_row_count+avg_daily_net_growth*30 END) AS estimated_row_count_30d
 FROM Trend;
 GO
-CREATE OR ALTER PROCEDURE dbo.usp_CaptureTableRowCount
+CREATE OR ALTER PROCEDURE analyzer.usp_CaptureTableRowCount
  @ReturnResults bit=1,
  @CaptureRunId bigint=NULL OUTPUT
 AS
@@ -189,7 +185,7 @@ BEGIN
   @DatabaseName sysname,@DatabaseGuid uniqueidentifier,@Sql nvarchar(max),
   @QueueId int=1,@DatabaseCount int,@TableCount int;
  BEGIN TRY
-  INSERT dbo.TableRowCountRun(snapshot_date,started_at_utc,source_server,source_time_at_start,status)
+  INSERT analyzer.TableRowCountRun(snapshot_date,started_at_utc,source_server,source_time_at_start,status)
   VALUES(@SnapshotDate,SYSUTCDATETIME(),CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),
    SYSDATETIMEOFFSET(),'RUNNING');
   SET @CaptureRunId=CONVERT(bigint,SCOPE_IDENTITY());
@@ -233,14 +229,14 @@ BEGIN
 
   -- Replace today's complete snapshot only after every database has been read.
   BEGIN TRANSACTION;
-  DELETE dbo.TableRowCountSnapshot WHERE snapshot_date=@SnapshotDate;
-  INSERT dbo.TableRowCountSnapshot(snapshot_date,database_id,database_guid,database_name,
+  DELETE analyzer.TableRowCountSnapshot WHERE snapshot_date=@SnapshotDate;
+  INSERT analyzer.TableRowCountSnapshot(snapshot_date,database_id,database_guid,database_name,
    table_object_id,table_create_date,schema_name,table_name,row_count,UsedMB,captured_at,capture_run_id)
   SELECT @SnapshotDate,database_id,database_guid,database_name,
    table_object_id,table_create_date,schema_name,table_name,row_count,UsedMB,captured_at,@CaptureRunId
   FROM #Counts;
   SET @TableCount=@@ROWCOUNT;
-  UPDATE dbo.TableRowCountRun
+  UPDATE analyzer.TableRowCountRun
   SET status='SUCCEEDED',completed_at_utc=SYSUTCDATETIME(),database_count=@DatabaseCount,
    table_count=@TableCount,unavailable_table_count=(SELECT COUNT(*) FROM #Counts WHERE row_count IS NULL),
    unavailable_size_table_count=(SELECT COUNT(*) FROM #Counts WHERE UsedMB IS NULL)
@@ -249,7 +245,7 @@ BEGIN
  END TRY
  BEGIN CATCH
   IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
-  UPDATE dbo.TableRowCountRun
+  UPDATE analyzer.TableRowCountRun
   SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),failed_database=@DatabaseName,
    error_number=ERROR_NUMBER(),error_message=ERROR_MESSAGE()
   WHERE capture_run_id=@CaptureRunId;
@@ -257,8 +253,8 @@ BEGIN
  END CATCH;
  IF @ReturnResults=1
  BEGIN
-  SELECT * FROM dbo.TableRowCountRun WHERE capture_run_id=@CaptureRunId;
-  SELECT * FROM dbo.TableRowCountSnapshot WHERE capture_run_id=@CaptureRunId
+  SELECT * FROM analyzer.TableRowCountRun WHERE capture_run_id=@CaptureRunId;
+  SELECT * FROM analyzer.TableRowCountSnapshot WHERE capture_run_id=@CaptureRunId
    ORDER BY database_name,schema_name,table_name;
  END;
 END;

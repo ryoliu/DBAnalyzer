@@ -4,10 +4,10 @@ SELECT * FROM TableRowCountTestLab.dbo.StartupLoadRun ORDER BY load_run_id DESC;
 
 -- Daily metadata snapshots and linear estimates.
 SELECT snapshot_date,row_count,UsedMB,captured_at
-FROM DBAnalyzer.dbo.TableRowCountSnapshot
+FROM MS_PERF_COLLECTION.analyzer.TableRowCountSnapshot
 WHERE database_name=N'TableRowCountTestLab' AND schema_name=N'dbo' AND table_name=N'SampleRows'
 ORDER BY snapshot_date;
-SELECT * FROM DBAnalyzer.dbo.vTableRowCountForecast
+SELECT * FROM MS_PERF_COLLECTION.analyzer.vTableRowCountForecast
 WHERE database_name=N'TableRowCountTestLab' AND schema_name=N'dbo' AND table_name=N'SampleRows';
 
 -- Job history includes insertion or snapshot errors.

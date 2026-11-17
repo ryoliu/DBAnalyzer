@@ -11,6 +11,7 @@ $files=@(
     'Features\WhoIsActive\WhoIsActive_11_Deployment_In_Once.sql',
     'Features\WhoIsActive\Deploy_WhoIsActiveJob.sql',
     'Check_Environment.sql',
+    'Features\Deploy_AnalyzerSchema.sql',
     'Features\Blocking\Deploy_DBAnalyzer_Daily.sql',
     'Features\LoginFailed\Deploy_DBAnalyzer_LoginFailed.sql',
     'Features\LongRunning\Deploy_DBAnalyzer_LongRunning.sql',
@@ -50,6 +51,8 @@ try {
     $connection.Open()
     $command=$connection.CreateCommand()
     $command.CommandTimeout=180
+    $command.CommandText="IF OBJECT_ID(N'DBAnalyzer.dbo.BlockingAnalysisRun',N'U') IS NOT NULL AND OBJECT_ID(N'MS_PERF_COLLECTION.analyzer.BlockingAnalysisRun',N'U') IS NULL THROW 58860,'Existing DBAnalyzer history requires migration before deployment.',1;"
+    [void]$command.ExecuteNonQuery()
 
     foreach($file in $files) {
         Write-Host ('Running '+$file)

@@ -1,18 +1,18 @@
 # DBAnalyzer history retention
 
-`dbo.usp_PurgeDBAnalyzerHistory` cleans the 12 Blocking, HighResource, LoginFailed,
+`analyzer.usp_PurgeDBAnalyzerHistory` cleans the 12 Blocking, HighResource, LoginFailed,
 LongRunning, and TableRowCount history tables. The default retention period is 30
 calendar dates including today, based on SQL Server local time. For example,
 2026-11-17 keeps dates from 2026-10-19 onward.
 
 ```sql
-USE DBAnalyzer;
+USE MS_PERF_COLLECTION;
 
 -- Preview only; this is the default.
-EXEC dbo.usp_PurgeDBAnalyzerHistory @RetentionDays=30;
+EXEC analyzer.usp_PurgeDBAnalyzerHistory @RetentionDays=30;
 
 -- Delete expired completed runs and their child rows.
-EXEC dbo.usp_PurgeDBAnalyzerHistory @RetentionDays=30, @PreviewOnly=0;
+EXEC analyzer.usp_PurgeDBAnalyzerHistory @RetentionDays=30, @PreviewOnly=0;
 ```
 
 The result lists the cutoff date and the number of selected or deleted rows for

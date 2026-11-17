@@ -1,6 +1,6 @@
-USE DBAnalyzer;
+USE MS_PERF_COLLECTION;
 GO
-CREATE OR ALTER PROCEDURE dbo.usp_PurgeDBAnalyzerHistory
+CREATE OR ALTER PROCEDURE analyzer.usp_PurgeDBAnalyzerHistory
  @RetentionDays int = 30,
  @PreviewOnly bit = 1
 AS
@@ -25,97 +25,97 @@ BEGIN
 
   -- Hold the selected completed runs until all child rows and parent rows are processed.
   SELECT analysis_run_id INTO #BlockingRuns
-  FROM dbo.BlockingAnalysisRun WITH (UPDLOCK, HOLDLOCK)
+  FROM analyzer.BlockingAnalysisRun WITH (UPDLOCK, HOLDLOCK)
   WHERE COALESCE(analysis_date, CONVERT(date, source_time_at_start)) < @KeepFromDate AND status IN ('SUCCEEDED', 'FAILED');
 
   SELECT analysis_run_id INTO #HighResourceRuns
-  FROM dbo.HighResourceSqlAnalysisRun WITH (UPDLOCK, HOLDLOCK)
+  FROM analyzer.HighResourceSqlAnalysisRun WITH (UPDLOCK, HOLDLOCK)
   WHERE analysis_date < @KeepFromDate AND status IN ('SUCCEEDED', 'FAILED');
 
   SELECT analysis_run_id INTO #LoginFailedRuns
-  FROM dbo.LoginFailedAnalysisRun WITH (UPDLOCK, HOLDLOCK)
+  FROM analyzer.LoginFailedAnalysisRun WITH (UPDLOCK, HOLDLOCK)
   WHERE analysis_date < @KeepFromDate AND status IN ('SUCCEEDED', 'FAILED');
 
   SELECT analysis_run_id INTO #LongRunningRuns
-  FROM dbo.LongRunningSqlAnalysisRun WITH (UPDLOCK, HOLDLOCK)
+  FROM analyzer.LongRunningSqlAnalysisRun WITH (UPDLOCK, HOLDLOCK)
   WHERE analysis_date < @KeepFromDate AND status IN ('SUCCEEDED', 'FAILED');
 
   SELECT capture_run_id INTO #TableRowCountRuns
-  FROM dbo.TableRowCountRun WITH (UPDLOCK, HOLDLOCK)
+  FROM analyzer.TableRowCountRun WITH (UPDLOCK, HOLDLOCK)
   WHERE snapshot_date < @KeepFromDate AND status IN ('SUCCEEDED', 'FAILED');
 
 
-  IF EXISTS (SELECT 1 FROM dbo.HighResourceSql d WITH (UPDLOCK, HOLDLOCK) JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id
+  IF EXISTS (SELECT 1 FROM analyzer.HighResourceSql d WITH (UPDLOCK, HOLDLOCK) JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id
    WHERE d.analysis_date >= @KeepFromDate)
    THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
 
-  IF EXISTS (SELECT 1 FROM dbo.LoginFailedSummary d WITH (UPDLOCK, HOLDLOCK) JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id
+  IF EXISTS (SELECT 1 FROM analyzer.LoginFailedSummary d WITH (UPDLOCK, HOLDLOCK) JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id
    WHERE d.analysis_date >= @KeepFromDate)
    THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
-  IF EXISTS (SELECT 1 FROM dbo.LoginFailed d WITH (UPDLOCK, HOLDLOCK) JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id
-   WHERE d.analysis_date >= @KeepFromDate)
-   THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
-
-  IF EXISTS (SELECT 1 FROM dbo.LongRunningSql d WITH (UPDLOCK, HOLDLOCK) JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id
+  IF EXISTS (SELECT 1 FROM analyzer.LoginFailed d WITH (UPDLOCK, HOLDLOCK) JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id
    WHERE d.analysis_date >= @KeepFromDate)
    THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
 
-  IF EXISTS (SELECT 1 FROM dbo.TableRowCountSnapshot d WITH (UPDLOCK, HOLDLOCK) JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id
+  IF EXISTS (SELECT 1 FROM analyzer.LongRunningSql d WITH (UPDLOCK, HOLDLOCK) JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id
+   WHERE d.analysis_date >= @KeepFromDate)
+   THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
+
+  IF EXISTS (SELECT 1 FROM analyzer.TableRowCountSnapshot d WITH (UPDLOCK, HOLDLOCK) JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id
    WHERE d.snapshot_date >= @KeepFromDate)
    THROW 58505, 'A selected run has child data inside the retention window. No data was deleted.', 1;
 
   IF @PreviewOnly = 1
   BEGIN
    INSERT #Results SELECT N'BlockingDetail', COUNT_BIG(*)
-   FROM dbo.BlockingDetail d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.BlockingDetail d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'BlockingIncident', COUNT_BIG(*)
-   FROM dbo.BlockingIncident d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.BlockingIncident d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'BlockingAnalysisRun', COUNT_BIG(*)
-   FROM dbo.BlockingAnalysisRun d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.BlockingAnalysisRun d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'HighResourceSql', COUNT_BIG(*)
-   FROM dbo.HighResourceSql d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.HighResourceSql d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'HighResourceSqlAnalysisRun', COUNT_BIG(*)
-   FROM dbo.HighResourceSqlAnalysisRun d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.HighResourceSqlAnalysisRun d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'LoginFailedSummary', COUNT_BIG(*)
-   FROM dbo.LoginFailedSummary d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.LoginFailedSummary d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'LoginFailed', COUNT_BIG(*)
-   FROM dbo.LoginFailed d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.LoginFailed d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'LoginFailedAnalysisRun', COUNT_BIG(*)
-   FROM dbo.LoginFailedAnalysisRun d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.LoginFailedAnalysisRun d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'LongRunningSql', COUNT_BIG(*)
-   FROM dbo.LongRunningSql d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.LongRunningSql d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'LongRunningSqlAnalysisRun', COUNT_BIG(*)
-   FROM dbo.LongRunningSqlAnalysisRun d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
+   FROM analyzer.LongRunningSqlAnalysisRun d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results SELECT N'TableRowCountSnapshot', COUNT_BIG(*)
-   FROM dbo.TableRowCountSnapshot d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
+   FROM analyzer.TableRowCountSnapshot d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
    INSERT #Results SELECT N'TableRowCountRun', COUNT_BIG(*)
-   FROM dbo.TableRowCountRun d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
+   FROM analyzer.TableRowCountRun d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
   END
   ELSE
   BEGIN
-   DELETE d FROM dbo.BlockingDetail d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.BlockingDetail d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'BlockingDetail', ROWCOUNT_BIG());
-   DELETE d FROM dbo.BlockingIncident d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.BlockingIncident d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'BlockingIncident', ROWCOUNT_BIG());
-   DELETE d FROM dbo.BlockingAnalysisRun d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.BlockingAnalysisRun d JOIN #BlockingRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'BlockingAnalysisRun', ROWCOUNT_BIG());
-   DELETE d FROM dbo.HighResourceSql d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.HighResourceSql d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'HighResourceSql', ROWCOUNT_BIG());
-   DELETE d FROM dbo.HighResourceSqlAnalysisRun d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.HighResourceSqlAnalysisRun d JOIN #HighResourceRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'HighResourceSqlAnalysisRun', ROWCOUNT_BIG());
-   DELETE d FROM dbo.LoginFailedSummary d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.LoginFailedSummary d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'LoginFailedSummary', ROWCOUNT_BIG());
-   DELETE d FROM dbo.LoginFailed d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.LoginFailed d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'LoginFailed', ROWCOUNT_BIG());
-   DELETE d FROM dbo.LoginFailedAnalysisRun d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.LoginFailedAnalysisRun d JOIN #LoginFailedRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'LoginFailedAnalysisRun', ROWCOUNT_BIG());
-   DELETE d FROM dbo.LongRunningSql d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.LongRunningSql d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'LongRunningSql', ROWCOUNT_BIG());
-   DELETE d FROM dbo.LongRunningSqlAnalysisRun d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
+   DELETE d FROM analyzer.LongRunningSqlAnalysisRun d JOIN #LongRunningRuns r ON r.analysis_run_id = d.analysis_run_id;
    INSERT #Results VALUES (N'LongRunningSqlAnalysisRun', ROWCOUNT_BIG());
-   DELETE d FROM dbo.TableRowCountSnapshot d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
+   DELETE d FROM analyzer.TableRowCountSnapshot d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
    INSERT #Results VALUES (N'TableRowCountSnapshot', ROWCOUNT_BIG());
-   DELETE d FROM dbo.TableRowCountRun d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
+   DELETE d FROM analyzer.TableRowCountRun d JOIN #TableRowCountRuns r ON r.capture_run_id = d.capture_run_id;
    INSERT #Results VALUES (N'TableRowCountRun', ROWCOUNT_BIG());
   END;
   COMMIT TRANSACTION;

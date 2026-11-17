@@ -14,7 +14,7 @@ BEGIN TRY
   THROW 58511, 'Multiple cleanup jobs exist. Resolve before deploying.', 1;
 
  DECLARE @JobId uniqueidentifier, @ScheduleId int, @Owner sysname = SUSER_SNAME(0x01),
-         @Command nvarchar(max) = N'EXEC dbo.usp_PurgeDBAnalyzerHistory @RetentionDays=30, @PreviewOnly=0;';
+         @Command nvarchar(max) = N'EXEC analyzer.usp_PurgeDBAnalyzerHistory @RetentionDays=30, @PreviewOnly=0;';
  SELECT @JobId = job_id FROM dbo.sysjobs
  WHERE name IN (N'_DBAnalyzer-History-Cleanup', N'_DBAnalyzer-Blocking-Cleanup');
  IF @JobId IS NULL
@@ -32,9 +32,9 @@ BEGIN TRY
   THROW 58512, 'Unexpected cleanup job steps exist. Resolve before deploying.', 1;
  IF NOT EXISTS (SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=1)
   EXEC dbo.sp_add_jobstep @job_id=@JobId, @step_id=1, @step_name=N'Purge DBAnalyzer history',
-   @subsystem=N'TSQL', @database_name=N'DBAnalyzer', @command=@Command;
+   @subsystem=N'TSQL', @database_name=N'MS_PERF_COLLECTION', @command=@Command;
  EXEC dbo.sp_update_jobstep @job_id=@JobId, @step_id=1, @step_name=N'Purge DBAnalyzer history',
-  @subsystem=N'TSQL', @database_name=N'DBAnalyzer', @command=@Command,
+  @subsystem=N'TSQL', @database_name=N'MS_PERF_COLLECTION', @command=@Command,
   @retry_attempts=3, @retry_interval=1, @on_success_action=1, @on_fail_action=2;
 
  IF (SELECT COUNT(*) FROM dbo.sysschedules WHERE name IN

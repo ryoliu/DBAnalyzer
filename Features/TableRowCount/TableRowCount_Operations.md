@@ -1,14 +1,14 @@
 # 每日資料表筆數、容量與增長
 
-`dbo.usp_CaptureTableRowCount` 擷取所有使用者資料庫中資料表的中繼資料估計筆數與 `UsedMB`，排除 `DBAnalyzer`、`MS_PERF_COLLECTION`、系統資料庫及資料庫快照。新建的使用者資料庫會自動納入，不需要逐一設定名稱。
+`analyzer.usp_CaptureTableRowCount` 擷取所有使用者資料庫中資料表的中繼資料估計筆數與 `UsedMB`，排除 `DBAnalyzer`、`MS_PERF_COLLECTION`、系統資料庫及資料庫快照。新建的使用者資料庫會自動納入，不需要逐一設定名稱。
 
 |物件|用途|
 |---|---|
-|`dbo.TableRowCountSnapshot`|每個日期、每個資料表的筆數及 UsedMB 快照|
-|`dbo.TableRowCountRun`|執行狀態、資料庫數、表數、筆數／容量缺值表數及錯誤|
-|`dbo.vTableRowCountGrowth`|與前一份有效快照比較的筆數與容量淨增減|
-|`dbo.vTableRowCountGrowthSummary`|第一份至最後一份有效快照的筆數及容量平均每日增長|
-|`dbo.vTableRowCountForecast`|最近 30 個日曆日期的筆數趨勢，估算最新快照之後 7 天及 30 天的筆數|
+|`analyzer.TableRowCountSnapshot`|每個日期、每個資料表的筆數及 UsedMB 快照|
+|`analyzer.TableRowCountRun`|執行狀態、資料庫數、表數、筆數／容量缺值表數及錯誤|
+|`analyzer.vTableRowCountGrowth`|與前一份有效快照比較的筆數與容量淨增減|
+|`analyzer.vTableRowCountGrowthSummary`|第一份至最後一份有效快照的筆數及容量平均每日增長|
+|`analyzer.vTableRowCountForecast`|最近 30 個日曆日期的筆數趨勢，估算最新快照之後 7 天及 30 天的筆數|
 |`_DBAnalyzer-Daily` 第 5 步|每日 VM 當地時間 02:00 啟動，前四步成功後擷取當下筆數|
 
 ## 執行與日期
@@ -55,7 +55,7 @@ UsedMB 包含這些分割區的資料頁、索引、LOB 與 Row-overflow 已使�
 
 ## 筆數線性估算
 
-`dbo.vTableRowCountForecast` 是查詢 View，不另外收集或儲存預測結果，也不修改既有平均增長 View。使用 VM 當地今日及前 29 個日期的快照；較早與未來日期不納入。僅列出這個範圍內最新一批快照中的資料表，因此已不在最新快照清單中的舊表不會繼續顯示。若最近 30 個日期都沒有快照，回傳空結果。
+`analyzer.vTableRowCountForecast` 是查詢 View，不另外收集或儲存預測結果，也不修改既有平均增長 View。使用 VM 當地今日及前 29 個日期的快照；較早與未來日期不納入。僅列出這個範圍內最新一批快照中的資料表，因此已不在最新快照清單中的舊表不會繼續顯示。若最近 30 個日期都沒有快照，回傳空結果。
 
 同一張表仍以 database ID、database GUID、table object ID、建表時間識別。改名延續趨勢並顯示最新名稱；刪除重建或資料庫 GUID 改變時分開計算。
 
@@ -88,7 +88,7 @@ SELECT database_name,schema_name,table_name,forecast_status,
  first_snapshot_date,last_snapshot_date,snapshot_age_days,snapshot_count,observed_days,
  last_row_count,avg_daily_net_growth,
  forecast_date_7d,estimated_row_count_7d,forecast_date_30d,estimated_row_count_30d
-FROM DBAnalyzer.dbo.vTableRowCountForecast
+FROM MS_PERF_COLLECTION.analyzer.vTableRowCountForecast
 ORDER BY estimated_row_count_30d DESC,database_name,schema_name,table_name;
 ```
 

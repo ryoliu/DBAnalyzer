@@ -102,10 +102,10 @@ BEGIN TRY
   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=2)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Capture table row counts',@subsystem=N'TSQL',
-   @command=N'EXEC dbo.usp_CaptureTableRowCount @ReturnResults=0;';
+   @command=N'EXEC analyzer.usp_CaptureTableRowCount @ReturnResults=0;';
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Capture table row counts',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',
-  @command=N'EXEC dbo.usp_CaptureTableRowCount @ReturnResults=0;',
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',
+  @command=N'EXEC analyzer.usp_CaptureTableRowCount @ReturnResults=0;',
   @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
 
  SELECT @ScheduleId=schedule_id FROM dbo.sysschedules WHERE name=N'_DBAnalyzer-TestRows-AgentStart';

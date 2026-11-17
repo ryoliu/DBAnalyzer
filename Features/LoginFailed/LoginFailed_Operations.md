@@ -4,22 +4,22 @@
 
 |物件|用途|
 |---|---|
-|`dbo.usp_AnalyzeLoginFailed`|收集指定日期，預設前一天|
-|`dbo.LoginFailed`|時間、帳號、來源、原因、Error、State 與原文|
-|`dbo.LoginFailedSummary`|依日期、分類、Error、State 彙總|
-|`dbo.vLoginFailedClassified`|明細加上原因文字與 Error State 分類|
-|`dbo.LoginFailedAnalysisRun`|每次執行的狀態、稽核設定、讀取檔案數、筆數與錯誤|
+|`analyzer.usp_AnalyzeLoginFailed`|收集指定日期，預設前一天|
+|`analyzer.LoginFailed`|時間、帳號、來源、原因、Error、State 與原文|
+|`analyzer.LoginFailedSummary`|依日期、分類、Error、State 彙總|
+|`analyzer.vLoginFailedClassified`|明細加上原因文字與 Error State 分類|
+|`analyzer.LoginFailedAnalysisRun`|每次執行的狀態、稽核設定、讀取檔案數、筆數與錯誤|
 
 ## 執行與參數
 
 ```sql
-EXEC DBAnalyzer.dbo.usp_AnalyzeLoginFailed;
+EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed;
 
 -- SQL Agent: collect the previous day without result sets.
-EXEC DBAnalyzer.dbo.usp_AnalyzeLoginFailed @ReturnResults=0;
+EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed @ReturnResults=0;
 
 -- Increase limits for a historical date only if its source logs still exist.
-EXEC DBAnalyzer.dbo.usp_AnalyzeLoginFailed
+EXEC MS_PERF_COLLECTION.analyzer.usp_AnalyzeLoginFailed
     @AnalysisDate='20261016', @MaxArchiveNo=20, @RetentionDays=90;
 ```
 

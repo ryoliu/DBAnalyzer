@@ -9,13 +9,14 @@ IF NOT EXISTS(SELECT 1 FROM sys.dm_server_services
  THROW 57002,'SQL Server Agent must be running.',1;
 IF NOT EXISTS(SELECT 1 FROM sys.databases WHERE name=N'MS_PERF_COLLECTION' AND state_desc=N'ONLINE')
  THROW 57003,'MS_PERF_COLLECTION must already exist and be online.',1;
-IF EXISTS(SELECT 1 FROM sys.databases WHERE name=N'DBAnalyzer'
+IF EXISTS(SELECT 1 FROM sys.databases WHERE name=N'MS_PERF_COLLECTION'
  AND (state_desc<>N'ONLINE' OR is_read_only=1 OR compatibility_level<110))
- THROW 57004,'DBAnalyzer must be online, writable, and use compatibility level 110 or later.',1;
+ THROW 57004,'MS_PERF_COLLECTION must be online, writable, and use compatibility level 110 or later.',1;
 IF EXISTS(
  SELECT 1 FROM msdb.dbo.sysjobactivity a JOIN msdb.dbo.sysjobs j ON j.job_id=a.job_id
  WHERE j.name IN(N'_DBAnalyzer-Daily',N'_DBAnalyzer-Blocking-Daily',N'_DBAnalyzer-Blocking-Cleanup',
-  N'_DBAnalyzer-LoginFailed-Daily',N'_DBAnalyzer-Blocking-Incremental')
+  N'_DBAnalyzer-LoginFailed-Daily',N'_DBAnalyzer-Blocking-Incremental',
+  N'_DBAnalyzer-History-Cleanup',N'_DBAnalyzer-TestRows-Startup')
  AND a.session_id=(SELECT MAX(session_id) FROM msdb.dbo.syssessions)
  AND a.run_requested_date IS NOT NULL AND a.stop_execution_date IS NULL)
  THROW 57005,'An analyzer job is running or queued. Wait and deploy again.',1;

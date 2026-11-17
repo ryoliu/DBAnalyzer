@@ -36,44 +36,44 @@ BEGIN TRY
   THROW 54203,'Unexpected job steps exist; resolve before deploying.',1;
 
  -- Create missing steps, then configure new and existing steps in one place.
- SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveBlocking @ReturnResults=0;';
+ SET @StepCommand=N'EXEC analyzer.usp_AnalyzeWhoIsActiveBlocking @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=1)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Analyze blocking',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=1,@step_name=N'Analyze blocking',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
 
- SET @StepCommand=N'EXEC dbo.usp_AnalyzeLoginFailed @ReturnResults=0;';
+ SET @StepCommand=N'EXEC analyzer.usp_AnalyzeLoginFailed @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=2)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Collect failed logins',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=2,@step_name=N'Collect failed logins',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
 
- SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveLongRunning @ReturnResults=0;';
+ SET @StepCommand=N'EXEC analyzer.usp_AnalyzeWhoIsActiveLongRunning @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=3)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=3,@step_name=N'Analyze long-running SQL',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=3,@step_name=N'Analyze long-running SQL',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
 
- SET @StepCommand=N'EXEC dbo.usp_AnalyzeWhoIsActiveHighResource @ReturnResults=0;';
+ SET @StepCommand=N'EXEC analyzer.usp_AnalyzeWhoIsActiveHighResource @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=4)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=4,@step_name=N'Analyze high-resource SQL',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=3,@on_fail_action=2;
 
- SET @StepCommand=N'EXEC dbo.usp_CaptureTableRowCount @ReturnResults=0;';
+ SET @StepCommand=N'EXEC analyzer.usp_CaptureTableRowCount @ReturnResults=0;';
  IF NOT EXISTS(SELECT 1 FROM dbo.sysjobsteps WHERE job_id=@JobId AND step_id=5)
   EXEC dbo.sp_add_jobstep @job_id=@JobId,@step_id=5,@step_name=N'Capture table row counts',
    @subsystem=N'TSQL',@command=@StepCommand;
  EXEC dbo.sp_update_jobstep @job_id=@JobId,@step_id=5,@step_name=N'Capture table row counts',
-  @subsystem=N'TSQL',@database_name=N'DBAnalyzer',@command=@StepCommand,
+  @subsystem=N'TSQL',@database_name=N'MS_PERF_COLLECTION',@command=@StepCommand,
   @retry_attempts=3,@retry_interval=1,@on_success_action=1,@on_fail_action=2;
 
  SELECT @OldScheduleId=js.schedule_id FROM dbo.sysjobschedules js

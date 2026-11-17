@@ -15,8 +15,12 @@
 - Call `LogonUser` with `LOGON32_LOGON_NEW_CREDENTIALS` (9) and `LOGON32_PROVIDER_WINNT50` (3), then use `WindowsIdentity.RunImpersonated` to open and use the SQL connection within that scope.
 - Use `Integrated Security=True;Encrypt=True;TrustServerCertificate=True;Pooling=False` for this lab connection. Dispose the SQL connection and token after use.
 - Obtain the password from the user or an explicitly authorized credential store. Never put passwords in source files, documentation, command-line arguments, logs, or Git.
-- Start with a read-only query that confirms `SERVERPROPERTY('ServerName')`, `ORIGINAL_LOGIN()`, and access to `DBAnalyzer`. A successful connection does not itself authorize deployment or data changes.
+- Start with a read-only query that confirms `SERVERPROPERTY('ServerName')`, `ORIGINAL_LOGIN()`, and access to `MS_PERF_COLLECTION`. A successful connection does not itself authorize deployment or data changes.
 - A separate `runas /netonly` window does not automatically share its network credentials with the agent's existing process. Failure of plain `sqlcmd -E` does not prove that the verified impersonation method is unavailable.
 
 - The user authorized Windows Credential Manager target `DBAnalyzer/WIN2019LAB/Administrator`. Dot-source `Tools/LabCredential.ps1` and call `[DBAnalyzerLabCredential]::Load()` to obtain the saved credential in memory. Never print its password. Use the saved credential with the impersonation method above. Save credentials only under the original local Windows identity, outside impersonation.
 - The lab IP was verified as `192.168.56.202` on 2026-11-17. If it changes, inspect VirtualBox guest properties before requesting credentials again.
+
+- Active monitoring objects use the single database `MS_PERF_COLLECTION`: raw WhoIsActive objects stay in `dbo`; all analysis tables, procedures, and views use `analyzer`. Do not recreate a separate DBAnalyzer database. Preserve raw-sample retention at 7 days and analysis retention at 30 calendar dates including today.
+
+- The original `DBAnalyzer` database was retained READ_ONLY after the 2026-11-17 consolidation for recovery only. All active jobs use `MS_PERF_COLLECTION.analyzer`; do not write to or reactivate the old database without a recovery request. The old collection `dbo.LoginFailed` table and procedure were removed; use `analyzer.LoginFailed` and `analyzer.usp_AnalyzeLoginFailed`.

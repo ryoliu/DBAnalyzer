@@ -2,13 +2,15 @@
 
 將整個 DBAnalyzer 資料夾複製到部署電腦，保留子資料夾結構。
 
+監控物件集中在 `MS_PERF_COLLECTION`：`dbo` 保留 WhoIsActive 原始採樣與相關函式，`analyzer` 放置分析表、SP 與 View。原始採樣保留 7 天，分析資料保留含當天的 30 個日期。既有 `DBAnalyzer` 的遷移方式見 `Features/Migration/Migration_Operations.md`。
+
 ## 使用方式
 
 1. 雙擊 **Deploy_GUI.cmd** 開啟部署視窗。
 2. 在 **SQL Server Instance** 輸入目標，例如：
    - WIN2019LAB
    - WIN2019LAB\LAB2
-   - tcp:192.168.56.104,1433
+   - tcp:192.168.56.202,1433
 3. Lab 使用自簽憑證時，勾選 **Trust server certificate**。
 4. 畫面會列出 **WhoIsActive、Blocking、LoginFailed、LongRunning、HighResource、TableRowCount、Maintance**。按 **Deploy** 依序佈署全部項目，下方會顯示執行進度及成功／失敗訊息。
 
@@ -20,7 +22,7 @@
 runas /netonly /user:WIN2019LAB\Administrator "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\DBAnalyzer\Deploy_GUI.ps1"
 ```
 
-輸入密碼後會開啟 GUI，不會將密碼存入檔案。在 Instance 輸入 VM IP，例如 tcp:192.168.56.104,1433。
+輸入密碼後會開啟 GUI，不會將密碼存入檔案。在 Instance 輸入 VM IP，例如 tcp:192.168.56.202,1433。
 
 ## 檔案
 
@@ -45,6 +47,7 @@ DBAnalyzer/
     HighResource/
     TableRowCount/
     Retention/
+    Migration/
     Jobs/
     Maintance/
   Deploy_GUI.cmd
@@ -58,19 +61,20 @@ DBAnalyzer/
 
 ## 部署順序
 
-1. Features/WhoIsActive/Deploy_WhoIsActive.sql：缺少時建立收集資料庫與表。
-2. Features/WhoIsActive/WhoIsActive_11_Deployment_In_Once.sql：只擷取 SP 批次，缺少時安裝。
-3. Features/WhoIsActive/Deploy_WhoIsActiveJob.sql：缺少時建立每分鐘收集及保留 7 天的 Job。
+1. Features/WhoIsActive/Deploy_WhoIsActive.sql
+2. Features/WhoIsActive/WhoIsActive_11_Deployment_In_Once.sql
+3. Features/WhoIsActive/Deploy_WhoIsActiveJob.sql
 4. Check_Environment.sql
-5. Features/Blocking/Deploy_DBAnalyzer_Daily.sql
-6. Features/LoginFailed/Deploy_DBAnalyzer_LoginFailed.sql
-7. Features/LongRunning/Deploy_DBAnalyzer_LongRunning.sql
-8. Features/HighResource/Deploy_DBAnalyzer_HighResource.sql
-9. Features/TableRowCount/Deploy_DBAnalyzer_TableRowCount.sql
-10. Features/Retention/Deploy_DBAnalyzer_Retention.sql
-11. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
-12. Features/Jobs/Deploy_DBAnalyzer_CleanupJob.sql
-13. Features/Maintance/_MaintanceJob.sql
+5. Features/Deploy_AnalyzerSchema.sql
+6. Features/Blocking/Deploy_DBAnalyzer_Daily.sql
+7. Features/LoginFailed/Deploy_DBAnalyzer_LoginFailed.sql
+8. Features/LongRunning/Deploy_DBAnalyzer_LongRunning.sql
+9. Features/HighResource/Deploy_DBAnalyzer_HighResource.sql
+10. Features/TableRowCount/Deploy_DBAnalyzer_TableRowCount.sql
+11. Features/Retention/Deploy_DBAnalyzer_Retention.sql
+12. Features/Jobs/Deploy_DBAnalyzer_Jobs.sql
+13. Features/Jobs/Deploy_DBAnalyzer_CleanupJob.sql
+14. Features/Maintance/_MaintanceJob.sql
 
 SQL 發生錯誤會停止並顯示檔名與批次。已完成的 SQL 不會整套回滾，修正後可重新部署。部署時請避開排程執行時間。
 
@@ -83,7 +87,7 @@ SQL 發生錯誤會停止並顯示檔名與批次。已完成的 SQL 不會整�
 - 登入稽核包含 failed logins，目前解析版本使用英文 ERRORLOG。
 - 維護腳本目前使用 `sa` 作為 Job 擁有者，該登入名稱必須存在。
 
-套件建立 WhoIsActive 收集環境、DBAnalyzer、分析物件及排程，也不立即重算日報。登入失敗收集使用應用程式執行鎖，避免收集與歷史清理同時執行。既有 WhoIsActive 表、SP 與收集 Job 保留，不覆寫原本的收集參數及頻率。
+套件在 MS_PERF_COLLECTION 建立 WhoIsActive 收集環境、analyzer Schema 分析物件及排程，也不立即重算日報。登入失敗收集使用應用程式執行鎖，避免收集與歷史清理同時執行。既有 WhoIsActive 表、SP 與收集 Job 保留，不覆寫原本的收集參數及頻率。
 
 WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整份舊版安裝檔，避免其中刪除資料表及重建 Job 的操作；也不執行舊版安裝檔中的輔助函式、測試採樣及既有資料庫設定變更。
 
@@ -103,7 +107,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 
 兩個備份 Job 最後會被腳本停用，部署不立即執行備份或每日維護內容。備份預設使用 QNAP 模式、位址 `127.0.0.1`、共用名稱 `sqlbk`、檔案保留 7 天；啟用前請依環境調整腳本中的設定。Deploy.ps1 完成時會檢查每日維護 Job 已啟用，且兩個備份 Job 已停用。
 
-每日分析 Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；DBAnalyzer 中的分析資料與執行紀錄保留。
+每日分析 Job 有五個步驟，各自失敗最多重試 3 次、間隔 1 分鐘；仍失敗則停止 Job。部署會將既有 Blocking Job 改名並保留其歷史，移除原本 LoginFailed Job 及其 Job 歷史；`MS_PERF_COLLECTION.analyzer` 中的分析資料與執行紀錄保留。
 
 登入失敗收集預設最多讀取 ERRORLOG 0～10，來源須涵蓋分析日期起點，讀取期間偵測到輪替則失敗並保留舊資料。成功收集時清除保留期間之外的明細與彙總；統一清理 Job 另清除過期執行紀錄。預設保留包含當天的 30 個日期；可使用 `@MaxArchiveNo` 與 `@RetentionDays` 調整。此次修改已在 WIN2019LAB 的獨立 tempdb 測試物件完成真實 ERRORLOG 與模擬異常驗證，並於 2026-10-20 部署至既有 DBAnalyzer，部署前後歷史筆數不變，詳見 `Features/LoginFailed/LoginFailed_Operations.md`。
 
@@ -113,7 +117,7 @@ WhoIsActive 沿用提供的 v11.32 原始碼及授權。GUI 不直接執行整�
 
 資料表快照同時記錄中繼資料估計筆數及 UsedMB，統計所有使用者資料庫，排除 DBAnalyzer 與 MS_PERF_COLLECTION。UsedMB 包含本表各索引分割區的資料、索引與 LOB 已使用頁面。每天一份當下快照，分別計算筆數與容量的淨增減、平均每日淨增長；只有一份有效快照時平均為 NULL，舊快照缺少容量時不回填。說明及查詢範例見 `Features/TableRowCount` 資料夾。
 
-`dbo.vTableRowCountForecast` 使用最近 30 個日曆日期的有效筆數，線性估算最新快照之後 7 天及 30 天的筆數，並顯示快照數、觀察天數、快照距今天數及預測日期。資料不足或最新筆數未知時為 NULL，負的估算結果歸零。已於 2026-10-20 測試並部署至 WIN2019LAB；目前每張表僅有兩天快照，估算仍需搭配樣本跨度判讀。
+`analyzer.vTableRowCountForecast` 使用最近 30 個日曆日期的有效筆數，線性估算最新快照之後 7 天及 30 天的筆數，並顯示快照數、觀察天數、快照距今天數及預測日期。資料不足或最新筆數未知時為 NULL，負的估算結果歸零。已於 2026-10-20 測試並部署至 WIN2019LAB；目前每張表僅有兩天快照，估算仍需搭配樣本跨度判讀。
 
 WIN2019LAB 另建有 `TableRowCountTestLab.dbo.SampleRows`：SQL Server Agent 啟動時執行 `_DBAnalyzer-TestRows-Startup`，每次 SQL Server 啟動新增 1,000 筆並更新筆數快照，同次啟動重試不重複插入。此為獨立、可選的測試環境，部署檔與說明位於 `Features/TableRowCount/TestLab`；VM 從儲存狀態恢復且服務未重新啟動時，不會觸發。
 

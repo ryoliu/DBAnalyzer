@@ -1,9 +1,9 @@
 
-USE DBAnalyzer;
+USE MS_PERF_COLLECTION;
 GO
-IF OBJECT_ID(N'dbo.LoginFailedAnalysisRun',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.LoginFailedAnalysisRun',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.LoginFailedAnalysisRun(
+ CREATE TABLE analyzer.LoginFailedAnalysisRun(
   analysis_run_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
   analysis_date date NOT NULL,
   started_at_utc datetime2(3) NOT NULL,
@@ -16,14 +16,14 @@ BEGIN
   failed_login_count bigint NULL,
   error_number int NULL,
   error_message nvarchar(4000) NULL);
- CREATE INDEX IX_LoginFailedRun_Date ON dbo.LoginFailedAnalysisRun(analysis_date,analysis_run_id);
+ CREATE INDEX IX_LoginFailedRun_Date ON analyzer.LoginFailedAnalysisRun(analysis_date,analysis_run_id);
 END;
 GO
-IF OBJECT_ID(N'dbo.LoginFailed',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.LoginFailed',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.LoginFailed(
+ CREATE TABLE analyzer.LoginFailed(
   login_failed_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
-  analysis_run_id bigint NOT NULL REFERENCES dbo.LoginFailedAnalysisRun(analysis_run_id),
+  analysis_run_id bigint NOT NULL REFERENCES analyzer.LoginFailedAnalysisRun(analysis_run_id),
   analysis_date date NOT NULL,
   log_date datetime NOT NULL,
   archive_number int NOT NULL,
@@ -36,15 +36,15 @@ BEGIN
   error_state int NULL,
   error_header nvarchar(max) NULL,
   raw_message nvarchar(max) NOT NULL);
- CREATE INDEX IX_LoginFailed_Date ON dbo.LoginFailed(analysis_date,log_date);
+ CREATE INDEX IX_LoginFailed_Date ON analyzer.LoginFailed(analysis_date,log_date);
 END;
 GO
 
-IF OBJECT_ID(N'dbo.LoginFailedSummary',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.LoginFailedSummary',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.LoginFailedSummary(
+ CREATE TABLE analyzer.LoginFailedSummary(
   summary_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
-  analysis_run_id bigint NOT NULL REFERENCES dbo.LoginFailedAnalysisRun(analysis_run_id),
+  analysis_run_id bigint NOT NULL REFERENCES analyzer.LoginFailedAnalysisRun(analysis_run_id),
   analysis_date date NOT NULL,
   failure_category varchar(48) NOT NULL,
   error_number int NULL,
@@ -56,10 +56,10 @@ BEGIN
   last_failure datetime NOT NULL,
   sample_failure_reason nvarchar(4000) NULL);
  CREATE UNIQUE INDEX UX_LoginFailedSummary_Group
- ON dbo.LoginFailedSummary(analysis_date,failure_category,error_number,error_state);
+ ON analyzer.LoginFailedSummary(analysis_date,failure_category,error_number,error_state);
 END;
 GO
-CREATE OR ALTER VIEW dbo.vLoginFailedClassified
+CREATE OR ALTER VIEW analyzer.vLoginFailedClassified
 AS
 SELECT f.*,CONVERT(varchar(48),CASE
  WHEN r.reason_text LIKE N'%failed to open%database%'
@@ -96,11 +96,11 @@ SELECT f.*,CONVERT(varchar(48),CASE
  WHEN f.error_number=18456 AND f.error_state=58 THEN 'AUTHENTICATION_CONFIGURATION'
  WHEN f.error_number=18456 AND f.error_state=62 THEN 'CONTAINED_USER_SID_MISMATCH'
  ELSE 'OTHER' END) AS failure_category
-FROM dbo.LoginFailed f
+FROM analyzer.LoginFailed f
 CROSS APPLY(SELECT LOWER(COALESCE(NULLIF(f.failure_reason,N''),f.raw_message,N'')) COLLATE Latin1_General_100_CI_AS AS reason_text) r;
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_AnalyzeLoginFailed
+CREATE OR ALTER PROCEDURE analyzer.usp_AnalyzeLoginFailed
     @AnalysisDate date = NULL,
     @ReturnResults bit = 1,
     @AnalysisRunId bigint = NULL OUTPUT,
@@ -137,7 +137,7 @@ BEGIN
 
     BEGIN TRY
         -- 1. Record the run and check login auditing.
-        INSERT dbo.LoginFailedAnalysisRun
+        INSERT analyzer.LoginFailedAnalysisRun
             (analysis_date, started_at_utc, source_server, source_time_at_start, status)
         VALUES
             (@AnalysisDate, SYSUTCDATETIME(), CONVERT(nvarchar(128), SERVERPROPERTY('ServerName')),
@@ -158,7 +158,7 @@ BEGIN
             @AuditValue OUTPUT, N'no_output';
         SET @AuditLevel = CASE @AuditValue
             WHEN 0 THEN N'none' WHEN 1 THEN N'success' WHEN 2 THEN N'failure' WHEN 3 THEN N'all' END;
-        UPDATE dbo.LoginFailedAnalysisRun SET audit_level = @AuditLevel
+        UPDATE analyzer.LoginFailedAnalysisRun SET audit_level = @AuditLevel
         WHERE analysis_run_id = @AnalysisRunId;
         IF @AuditLevel IS NULL OR LOWER(@AuditLevel) NOT IN (N'failure', N'all')
             THROW 56002, 'Login auditing must include failed logins.', 1;
@@ -301,8 +301,8 @@ BEGIN
 
         -- 5. Replace this date's details and summary in one transaction.
         BEGIN TRANSACTION;
-        DELETE FROM dbo.LoginFailed WHERE analysis_date = @AnalysisDate;
-        INSERT dbo.LoginFailed
+        DELETE FROM analyzer.LoginFailed WHERE analysis_date = @AnalysisDate;
+        INSERT analyzer.LoginFailed
             (analysis_run_id, analysis_date, log_date, archive_number, process_info,
              login_name, client_address, failure_reason, error_number, severity, error_state, error_header, raw_message)
         SELECT @AnalysisRunId, @AnalysisDate, log_date, archive_number, process_info,
@@ -311,22 +311,22 @@ BEGIN
         FROM #Failures;
         SET @FailureCount = @@ROWCOUNT;
 
-        DELETE FROM dbo.LoginFailedSummary WHERE analysis_date = @AnalysisDate;
-        INSERT dbo.LoginFailedSummary
+        DELETE FROM analyzer.LoginFailedSummary WHERE analysis_date = @AnalysisDate;
+        INSERT analyzer.LoginFailedSummary
             (analysis_run_id, analysis_date, failure_category, error_number, error_state,
              failure_count, affected_login_count, affected_client_count, first_failure, last_failure, sample_failure_reason)
         SELECT @AnalysisRunId, analysis_date, failure_category, error_number, error_state,
                COUNT_BIG(*), COUNT(DISTINCT NULLIF(login_name, N'')),
                COUNT(DISTINCT NULLIF(client_address, N'')), MIN(log_date), MAX(log_date),
                MIN(CONVERT(nvarchar(4000), failure_reason))
-        FROM dbo.vLoginFailedClassified
+        FROM analyzer.vLoginFailedClassified
         WHERE analysis_date = @AnalysisDate
         GROUP BY analysis_date, failure_category, error_number, error_state;
 
-        DELETE FROM dbo.LoginFailedSummary WHERE analysis_date < @KeepFromDate;
-        DELETE FROM dbo.LoginFailed WHERE analysis_date < @KeepFromDate;
+        DELETE FROM analyzer.LoginFailedSummary WHERE analysis_date < @KeepFromDate;
+        DELETE FROM analyzer.LoginFailed WHERE analysis_date < @KeepFromDate;
 
-        UPDATE dbo.LoginFailedAnalysisRun
+        UPDATE analyzer.LoginFailedAnalysisRun
         SET status = 'SUCCEEDED', completed_at_utc = SYSUTCDATETIME(),
             archives_scanned = @ArchivesScanned, failed_login_count = @FailureCount
         WHERE analysis_run_id = @AnalysisRunId;
@@ -341,7 +341,7 @@ BEGIN
             EXEC sys.sp_releaseapplock @Resource = N'DBAnalyzer.LoginFailed',
                 @LockOwner = N'Session', @DbPrincipal = N'public';
         IF @AnalysisRunId IS NOT NULL
-            UPDATE dbo.LoginFailedAnalysisRun
+            UPDATE analyzer.LoginFailedAnalysisRun
             SET status = 'FAILED', completed_at_utc = SYSUTCDATETIME(),
                 archives_scanned = @ArchivesScanned,
                 error_number = ERROR_NUMBER(), error_message = ERROR_MESSAGE()
@@ -351,9 +351,9 @@ BEGIN
 
     IF @ReturnResults = 1
     BEGIN
-        SELECT * FROM dbo.LoginFailedAnalysisRun WHERE analysis_run_id = @AnalysisRunId;
-        SELECT * FROM dbo.LoginFailed WHERE analysis_date = @AnalysisDate ORDER BY log_date, login_failed_id;
-        SELECT * FROM dbo.LoginFailedSummary WHERE analysis_date = @AnalysisDate
+        SELECT * FROM analyzer.LoginFailedAnalysisRun WHERE analysis_run_id = @AnalysisRunId;
+        SELECT * FROM analyzer.LoginFailed WHERE analysis_date = @AnalysisDate ORDER BY log_date, login_failed_id;
+        SELECT * FROM analyzer.LoginFailedSummary WHERE analysis_date = @AnalysisDate
         ORDER BY failure_count DESC, failure_category, error_number, error_state;
     END;
 END;
@@ -363,14 +363,14 @@ GO
 
 
 -- Initialize summaries from already collected details without rereading ERRORLOG.
-IF NOT EXISTS(SELECT 1 FROM dbo.LoginFailedSummary)
+IF NOT EXISTS(SELECT 1 FROM analyzer.LoginFailedSummary)
 BEGIN
- INSERT dbo.LoginFailedSummary(analysis_run_id,analysis_date,failure_category,error_number,error_state,
+ INSERT analyzer.LoginFailedSummary(analysis_run_id,analysis_date,failure_category,error_number,error_state,
  failure_count,affected_login_count,affected_client_count,first_failure,last_failure,sample_failure_reason)
  SELECT MAX(analysis_run_id),analysis_date,failure_category,error_number,error_state,COUNT_BIG(*),COUNT(DISTINCT NULLIF(login_name,N'')),
  COUNT(DISTINCT NULLIF(client_address,N'')),MIN(log_date),MAX(log_date),
  MIN(CONVERT(nvarchar(4000),failure_reason))
- FROM dbo.vLoginFailedClassified
+ FROM analyzer.vLoginFailedClassified
  GROUP BY analysis_date,failure_category,error_number,error_state;
 END;
 GO

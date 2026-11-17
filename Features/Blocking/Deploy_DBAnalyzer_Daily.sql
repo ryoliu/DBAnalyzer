@@ -1,12 +1,8 @@
-USE master;
+USE MS_PERF_COLLECTION;
 GO
-IF DB_ID(N'DBAnalyzer') IS NULL EXEC(N'CREATE DATABASE [DBAnalyzer]');
-GO
-USE DBAnalyzer;
-GO
-IF OBJECT_ID(N'dbo.BlockingAnalysisRun',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.BlockingAnalysisRun',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.BlockingAnalysisRun(
+ CREATE TABLE analyzer.BlockingAnalysisRun(
  analysis_run_id bigint IDENTITY PRIMARY KEY,
  started_at_utc datetime2(3) NOT NULL, completed_at_utc datetime2(3) NULL,
  source_server nvarchar(128) NOT NULL, source_time_at_start datetimeoffset(3) NOT NULL,
@@ -19,10 +15,10 @@ BEGIN
  CHECK(status IN ('RUNNING','SUCCEEDED','FAILED')));
 END;
 GO
-IF OBJECT_ID(N'dbo.BlockingIncident',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.BlockingIncident',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.BlockingIncident(
- analysis_run_id bigint NOT NULL REFERENCES dbo.BlockingAnalysisRun(analysis_run_id),
+ CREATE TABLE analyzer.BlockingIncident(
+ analysis_run_id bigint NOT NULL REFERENCES analyzer.BlockingAnalysisRun(analysis_run_id),
  incident_id bigint NOT NULL,start_time datetime NOT NULL,end_time datetime NULL,
  last_observed_time datetime NOT NULL,observed_duration_seconds decimal(20,6) NOT NULL,
  boundary_observed_at datetime NULL,end_status varchar(24) NOT NULL,
@@ -33,12 +29,12 @@ BEGIN
  blocker_host_name nvarchar(128) NULL,blocker_program_name nvarchar(128) NULL,
  blocker_sql nvarchar(max) NULL,blocker_batch nvarchar(max) NULL,
  PRIMARY KEY(analysis_run_id,incident_id));
- CREATE INDEX IX_BlockingIncident_Start ON dbo.BlockingIncident(start_time,blocker_session_id);
+ CREATE INDEX IX_BlockingIncident_Start ON analyzer.BlockingIncident(start_time,blocker_session_id);
 END;
 GO
-IF OBJECT_ID(N'dbo.BlockingDetail',N'U') IS NULL
+IF OBJECT_ID(N'analyzer.BlockingDetail',N'U') IS NULL
 BEGIN
- CREATE TABLE dbo.BlockingDetail(
+ CREATE TABLE analyzer.BlockingDetail(
  blocking_detail_id bigint IDENTITY PRIMARY KEY,analysis_run_id bigint NOT NULL,
  incident_id bigint NOT NULL,collection_time datetime NOT NULL,
  root_blocker_session_id int NOT NULL,root_blocker_login_time datetime NULL,
@@ -51,35 +47,35 @@ BEGIN
  victim_sql nvarchar(max) NULL,victim_batch nvarchar(max) NULL,
  direct_blocker_sql nvarchar(max) NULL,direct_blocker_batch nvarchar(max) NULL,
  root_blocker_sql nvarchar(max) NULL,root_blocker_batch nvarchar(max) NULL,
- FOREIGN KEY(analysis_run_id,incident_id) REFERENCES dbo.BlockingIncident(analysis_run_id,incident_id));
- CREATE INDEX IX_BlockingDetail_Incident ON dbo.BlockingDetail(analysis_run_id,incident_id,collection_time);
+ FOREIGN KEY(analysis_run_id,incident_id) REFERENCES analyzer.BlockingIncident(analysis_run_id,incident_id));
+ CREATE INDEX IX_BlockingDetail_Incident ON analyzer.BlockingDetail(analysis_run_id,incident_id,collection_time);
 END;
 GO
 
-IF COL_LENGTH('dbo.BlockingAnalysisRun','run_mode') IS NULL
- ALTER TABLE dbo.BlockingAnalysisRun ADD run_mode varchar(12) NOT NULL DEFAULT('LEGACY');
+IF COL_LENGTH('analyzer.BlockingAnalysisRun','run_mode') IS NULL
+ ALTER TABLE analyzer.BlockingAnalysisRun ADD run_mode varchar(12) NOT NULL DEFAULT('LEGACY');
 GO
-IF COL_LENGTH('dbo.BlockingAnalysisRun','analysis_date') IS NULL
- ALTER TABLE dbo.BlockingAnalysisRun ADD analysis_date date NULL,
+IF COL_LENGTH('analyzer.BlockingAnalysisRun','analysis_date') IS NULL
+ ALTER TABLE analyzer.BlockingAnalysisRun ADD analysis_date date NULL,
  is_current_daily bit NOT NULL CONSTRAINT DF_Run_CurrentDaily DEFAULT(0);
 GO
-IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.BlockingAnalysisRun') AND name='UX_Run_DailyDate')
- CREATE UNIQUE INDEX UX_Run_DailyDate ON dbo.BlockingAnalysisRun(analysis_date) WHERE is_current_daily=1;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('analyzer.BlockingAnalysisRun') AND name='UX_Run_DailyDate')
+ CREATE UNIQUE INDEX UX_Run_DailyDate ON analyzer.BlockingAnalysisRun(analysis_date) WHERE is_current_daily=1;
 GO
-CREATE OR ALTER VIEW dbo.vBlockingIncident
+CREATE OR ALTER VIEW analyzer.vBlockingIncident
 AS
- SELECT i.*,r.analysis_date FROM dbo.BlockingIncident i
- JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
+ SELECT i.*,r.analysis_date FROM analyzer.BlockingIncident i
+ JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
  WHERE r.run_mode='DAILY' AND r.is_current_daily=1;
 GO
-CREATE OR ALTER VIEW dbo.vBlockingDetail
+CREATE OR ALTER VIEW analyzer.vBlockingDetail
 AS
- SELECT d.*,r.analysis_date FROM dbo.BlockingDetail d
- JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
+ SELECT d.*,r.analysis_date FROM analyzer.BlockingDetail d
+ JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
  WHERE r.run_mode='DAILY' AND r.is_current_daily=1;
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_AnalyzeWhoIsActiveBlocking
+CREATE OR ALTER PROCEDURE analyzer.usp_AnalyzeWhoIsActiveBlocking
  @AnalysisDate date = NULL,
  @ReturnResults bit = 1,
  @AnalysisRunId bigint = NULL OUTPUT
@@ -95,7 +91,7 @@ BEGIN
          @ToTime datetime=DATEADD(DAY,1,CONVERT(datetime,@AnalysisDate)),
          @MaxSampleGapSeconds int=90;
  BEGIN TRY
-  INSERT dbo.BlockingAnalysisRun(started_at_utc,source_server,source_time_at_start,
+  INSERT analyzer.BlockingAnalysisRun(started_at_utc,source_server,source_time_at_start,
       requested_from_time,requested_to_time,max_sample_gap_seconds,status,run_mode,analysis_date)
   VALUES(SYSUTCDATETIME(),CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),SYSDATETIMEOFFSET(),
       @FromTime,@ToTime,@MaxSampleGapSeconds,'RUNNING','DAILY',@AnalysisDate);
@@ -122,7 +118,7 @@ SELECT collection_time, session_id, request_id, login_time, start_time,
                 NULLIF(sql_command.value('.', 'nvarchar(max)'), N''),
                 CONVERT(nvarchar(max), sql_command)) AS sql_command
 INTO #Capture
-FROM MS_PERF_COLLECTION.dbo.WHOISACTIVE
+FROM dbo.WHOISACTIVE
 WHERE collection_time >= @FromTime AND collection_time < @ToTime
 OPTION (RECOMPILE);
 
@@ -332,15 +328,15 @@ LEFT JOIN #Sessions AS b
 
   -- Replace only this date. A failed replacement leaves the old report intact.
   BEGIN TRANSACTION;
-  DELETE d FROM dbo.BlockingDetail d
-   JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
+  DELETE d FROM analyzer.BlockingDetail d
+   JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
    WHERE r.run_mode='DAILY' AND r.analysis_date=@AnalysisDate AND r.is_current_daily=1;
-  DELETE i FROM dbo.BlockingIncident i
-   JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
+  DELETE i FROM analyzer.BlockingIncident i
+   JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
    WHERE r.run_mode='DAILY' AND r.analysis_date=@AnalysisDate AND r.is_current_daily=1;
-  UPDATE dbo.BlockingAnalysisRun SET is_current_daily=0
+  UPDATE analyzer.BlockingAnalysisRun SET is_current_daily=0
    WHERE run_mode='DAILY' AND analysis_date=@AnalysisDate AND is_current_daily=1;
-  INSERT dbo.BlockingIncident(
+  INSERT analyzer.BlockingIncident(
    analysis_run_id, incident_id, start_time, end_time,
    last_observed_time, observed_duration_seconds, boundary_observed_at, end_status,
    starts_at_window_boundary, blocker_session_id, blocker_login_time, resolution_status,
@@ -355,7 +351,7 @@ LEFT JOIN #Sessions AS b
    blocker_login_name, blocker_host_name, blocker_program_name, blocker_sql,
    blocker_batch
   FROM #IncidentResults;
-  INSERT dbo.BlockingDetail(
+  INSERT analyzer.BlockingDetail(
    analysis_run_id, incident_id, collection_time, root_blocker_session_id,
    root_blocker_login_time, direct_blocker_session_id, direct_blocker_login_time, victim_session_id,
    victim_login_time, victim_request_id, victim_request_start_time, victim_database_name,
@@ -372,7 +368,7 @@ LEFT JOIN #Sessions AS b
    victim_batch, direct_blocker_sql, direct_blocker_batch, root_blocker_sql,
    root_blocker_batch
   FROM #DetailResults;
-  UPDATE dbo.BlockingAnalysisRun
+  UPDATE analyzer.BlockingAnalysisRun
    SET status='SUCCEEDED',completed_at_utc=SYSUTCDATETIME(),is_current_daily=1,
        captured_row_count=(SELECT COUNT_BIG(*) FROM #Capture),
        captured_sample_count=(SELECT COUNT(*) FROM #Samples),
@@ -386,7 +382,7 @@ LEFT JOIN #Sessions AS b
  BEGIN CATCH
   IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
   IF @AnalysisRunId IS NOT NULL
-   UPDATE dbo.BlockingAnalysisRun
+   UPDATE analyzer.BlockingAnalysisRun
     SET status='FAILED',completed_at_utc=SYSUTCDATETIME(),
         error_number=ERROR_NUMBER(),error_message=ERROR_MESSAGE()
     WHERE analysis_run_id=@AnalysisRunId;
@@ -394,13 +390,13 @@ LEFT JOIN #Sessions AS b
  END CATCH;
  IF @ReturnResults=1
  BEGIN
-  SELECT * FROM dbo.BlockingAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
-  SELECT * FROM dbo.vBlockingIncident WHERE analysis_run_id=@AnalysisRunId ORDER BY start_time,incident_id;
-  SELECT * FROM dbo.vBlockingDetail WHERE analysis_run_id=@AnalysisRunId ORDER BY incident_id,collection_time,victim_session_id;
+  SELECT * FROM analyzer.BlockingAnalysisRun WHERE analysis_run_id=@AnalysisRunId;
+  SELECT * FROM analyzer.vBlockingIncident WHERE analysis_run_id=@AnalysisRunId ORDER BY start_time,incident_id;
+  SELECT * FROM analyzer.vBlockingDetail WHERE analysis_run_id=@AnalysisRunId ORDER BY incident_id,collection_time,victim_session_id;
  END;
 END;
 GO
-CREATE OR ALTER PROCEDURE dbo.usp_PurgeBlockingAnalysis
+CREATE OR ALTER PROCEDURE analyzer.usp_PurgeBlockingAnalysis
  @RetentionDays int=30
 AS
 BEGIN
@@ -411,11 +407,11 @@ BEGIN
  DECLARE @CutoffDate date=DATEADD(DAY,-@RetentionDays,CONVERT(date,GETDATE()));
  BEGIN TRY
   BEGIN TRANSACTION;
-  DELETE d FROM dbo.BlockingDetail d JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
+  DELETE d FROM analyzer.BlockingDetail d JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=d.analysis_run_id
    WHERE r.run_mode='DAILY' AND r.analysis_date<@CutoffDate;
-  DELETE i FROM dbo.BlockingIncident i JOIN dbo.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
+  DELETE i FROM analyzer.BlockingIncident i JOIN analyzer.BlockingAnalysisRun r ON r.analysis_run_id=i.analysis_run_id
    WHERE r.run_mode='DAILY' AND r.analysis_date<@CutoffDate;
-  DELETE FROM dbo.BlockingAnalysisRun WHERE run_mode='DAILY' AND analysis_date<@CutoffDate;
+  DELETE FROM analyzer.BlockingAnalysisRun WHERE run_mode='DAILY' AND analysis_date<@CutoffDate;
   COMMIT TRANSACTION;
  END TRY
  BEGIN CATCH
